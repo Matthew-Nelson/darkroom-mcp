@@ -134,7 +134,12 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
         const output: Output = { path: saved.pngPath, sidecar_path: saved.sidecarPath, ...facts };
         const preview = await makePreview(result.png);
 
-        log("info", "generated image", { provider: provider.name, latency_ms: latencyMs, path: saved.pngPath });
+        log("info", "generated image", {
+          provider: provider.name,
+          latency_ms: latencyMs,
+          path: saved.pngPath,
+          progress_notifications: progress !== undefined,
+        });
         return {
           content: [
             { type: "image", data: preview.jpeg.toString("base64"), mimeType: "image/jpeg" },
