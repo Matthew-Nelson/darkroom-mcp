@@ -101,6 +101,7 @@ describe("loadConfig", () => {
       ["DARKROOM_ALLOW_PAID_FALLBACK", "yes", 'must be "true" or "false"'],
       ["COMFYUI_TIMEOUT_MS", "1.5", "must be a whole number"],
       ["COMFYUI_TIMEOUT_MS", "10", "must be at least 1000"],
+      ["COMFYUI_TIMEOUT_MS", "2147483648", "must be at most 2147483647 (about 24.8 days)"],
       ["COMFYUI_URL", "ftp://example.com", "must be an http(s) URL"],
       ["COMFYUI_URL", "not a url", "must be an http(s) URL"],
       ["COMFYUI_WORKFLOW", "../zimage", "must be a template name like 'zimage'"],

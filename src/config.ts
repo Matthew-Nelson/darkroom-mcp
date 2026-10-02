@@ -55,7 +55,12 @@ const httpUrl = z
 
 const workflowName = z.string().regex(/^[a-z0-9][a-z0-9_-]*$/, "must be a template name like 'zimage'");
 
-const timeoutMs = z.coerce.number({ error: "must be a number" }).int("must be a whole number").min(1000, "must be at least 1000");
+// Node's timers clamp anything above 2^31 - 1 ms to 1 ms, which would time out every request at once.
+const timeoutMs = z.coerce
+  .number({ error: "must be a number" })
+  .int("must be a whole number")
+  .min(1000, "must be at least 1000")
+  .max(2_147_483_647, "must be at most 2147483647 (about 24.8 days)");
 
 // API keys: only presence is checked, and their values never appear in errors.
 const apiKey = z.string();

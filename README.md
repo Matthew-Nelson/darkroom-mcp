@@ -81,7 +81,7 @@ All configuration comes from environment variables, validated at startup. The se
 | `DARKROOM_ALLOW_PAID_FALLBACK` | `false` | Lets the router fall from free to paid providers already in the order (from M3) |
 | `COMFYUI_URL` | `http://127.0.0.1:8188` | Local ComfyUI server |
 | `COMFYUI_WORKFLOW` | `zimage` | Workflow template in `workflows/`. A missing template fails startup |
-| `COMFYUI_TIMEOUT_MS` | `300000` | Per-request timeout, including time waiting in ComfyUI's queue |
+| `COMFYUI_TIMEOUT_MS` | `300000` | Per-request timeout, including time waiting in ComfyUI's queue. 1000 to 2147483647 (about 24.8 days, Node's timer limit) |
 | `DARKROOM_OPENAI_API_KEY`, `DARKROOM_GEMINI_API_KEY` | none | Darkroom-specific keys (from M2). A generic `OPENAI_API_KEY` in your shell is ignored. |
 
 ## Development
