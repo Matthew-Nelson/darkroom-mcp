@@ -98,6 +98,20 @@ describe("Ledger", () => {
     );
   });
 
+  it("still counts both calls when two processes' writes collide", async () => {
+    // Two sessions reserve at once: each rewrites the whole file, so one reservation is
+    // erased. Settling must put it back rather than lose that call's spend.
+    const a = Ledger.inDir(dir);
+    const b = Ledger.inDir(dir);
+    const [ra, rb] = await Promise.all([
+      a.reserve({ provider: "openai", estimateUsd: 0.02, capUsd: 2 }),
+      b.reserve({ provider: "openai", estimateUsd: 0.02, capUsd: 2 }),
+    ]);
+    await a.settle(ra, 0.05);
+    await b.settle(rb, 0.05);
+    expect(await a.spentTodayUsd()).toBe(0.1);
+  });
+
   it("rolls over at UTC midnight, not local midnight", async () => {
     const { c, now } = clock("2026-10-02T23:59:59.000Z");
     const ledger = Ledger.inDir(dir, { now });

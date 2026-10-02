@@ -6,8 +6,11 @@ import { z } from "zod";
 // Daily paid spend, kept as a JSON file in the output directory and keyed by UTC
 // date. Every paid call reserves its estimate first and settles afterwards, so
 // parallel calls can't all pass the cap check. Each operation re-reads the file,
-// so separate Claude Code sessions (separate processes) see each other's spend;
-// the window between their read and write is the accepted cross-process race.
+// so separate Claude Code sessions (separate processes) see each other's spend.
+// There is no cross-process lock: two sessions writing in the same instant can
+// both pass the cap check, or one can erase the other's fresh reservation. The
+// latter is repaired when that call settles (see close()), so its spend still
+// counts; until then other sessions don't see it. That is the accepted race.
 
 export const LEDGER_FILENAME = "spend-ledger.json";
 
@@ -43,6 +46,7 @@ export interface Reservation {
   day: string; // UTC date the reservation counts against, even if it settles after midnight
   provider: string;
   estimateUsd: number;
+  reservedAt: string;
 }
 
 export class CapExceededError extends Error {
@@ -114,7 +118,7 @@ export class Ledger {
       };
       (file.days[day] ??= []).push(entry);
       await this.write(file);
-      return { id: entry.id, day, provider: o.provider, estimateUsd: o.estimateUsd };
+      return { id: entry.id, day, provider: o.provider, estimateUsd: o.estimateUsd, reservedAt: entry.reserved_at };
     });
   }
 
@@ -150,8 +154,22 @@ export class Ledger {
   private close(r: Reservation, update: (e: Entry) => void): Promise<void> {
     return this.locked(async () => {
       const file = await this.read();
-      const entry = file.days[r.day]?.find((e) => e.id === r.id);
-      if (!entry) throw new LedgerError(`Reservation ${r.id} is missing from the spend ledger at ${this.path}.`);
+      let entry = file.days[r.day]?.find((e) => e.id === r.id);
+      if (!entry) {
+        // Another process rewrote the file after we reserved and erased this entry.
+        // Put it back, so the call's spend still counts.
+        entry = {
+          id: r.id,
+          provider: r.provider,
+          state: "reserved",
+          estimate_usd: r.estimateUsd,
+          amount_usd: r.estimateUsd,
+          amount_is_estimate: true,
+          reserved_at: r.reservedAt,
+          note: "restored: a concurrent write from another process had erased this reservation",
+        };
+        (file.days[r.day] ??= []).push(entry);
+      }
       update(entry);
       entry.closed_at = this.now().toISOString();
       await this.write(file);

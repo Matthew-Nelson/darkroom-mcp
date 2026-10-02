@@ -117,7 +117,8 @@ export class Router {
           });
         }
         await this.ledger.settle(reservation, result.actualCostUsd).catch((err: unknown) => {
-          // The image was paid for either way; the reservation still counts its estimate.
+          // The image was paid for either way. The ledger couldn't be written, so its
+          // reservation (if on disk) keeps counting the estimate instead of the actual cost.
           log("error", "could not settle spend reservation", { error: errorMessage(err) });
         });
       }
