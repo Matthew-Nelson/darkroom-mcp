@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M3 — Router and guardrails · status: not started
+## Current: M3 — Router and guardrails · status: in progress
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -9,7 +9,7 @@
 | M0: Scaffold and mock | done | `m0` |
 | M1: Local generation (Z-Image) | done | `m1` |
 | M2: Ledger + first paid provider | done | `m2` |
-| M3: Router and guardrails | not started | — |
+| M3: Router and guardrails | in progress | — |
 | M4: Ship it | not started | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
@@ -40,10 +40,15 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Next up
 
-- Plan M3 (fallback on failure with paid gating on every step, 60s health caching, refusal handling, `list_providers`, `list_images`) and give Matt a short plan before coding.
-- Open process question for Matt: `CLAUDE.md` says one PR per reviewable slice, but M2 shipped as one PR at his request. Ask whether M3 should be one PR or slices.
+- M3, on branch `m3/router-guardrails` (one PR for the milestone). Plan approved Oct 2, 2026; Matt OK'd the OpenAI spend for acceptance (about two drafts, ~$0.01–0.02):
+  1. Fallback on failure in the router (refusal and cancel never fall back; paid gate on every step), 60s health cache of healthy results only.
+  2. `list_providers` (adds `model` to `ImageProvider`).
+  3. `list_images` from the sidecars.
+  4. Acceptance run, stdio integration tests for all three tools, README.
 
 ## Deviations from spec
+
+- **One PR per milestone** (decided Oct 2, 2026, start of M3). Replaces one PR per slice; the slices are now single-idea commits inside the milestone's PR. `CLAUDE.md` and SPEC.md updated.
 
 - **The first paid provider is OpenAI, and it is now the cheaper one** (decided Oct 2, 2026, start of M2). Checked today: `gpt-image-2.5-flare` bills $30/M image output tokens, roughly $0.006 (low) to $0.05 (high) per 1024² image, and accepts any size in multiples of 16. Gemini 3.1 Flash Image is $0.045–$0.067 per image, and its Lite variant is $0.034 at 1K only. The spec called Gemini "cheapest"; SPEC.md's provider table was updated in PR #5 after review.
 - **OpenAI `draft` isn't 0.25MP** (M2). OpenAI's minimum image is 655,360 pixels, so `draft` renders at the smallest allowed size (816×816 at 1:1) at `low` quality; `final` uses the shared 1MP sizes at `medium` (Matt chose `medium` over `high` after the benchmark: `high` cost ~10× `low` for little visible gain). The spec allows per-provider tier mappings; this one is documented in the README, SPEC, and the tool's `quality` description.
