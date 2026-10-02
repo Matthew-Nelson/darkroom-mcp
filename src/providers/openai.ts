@@ -186,10 +186,10 @@ interface ErrorBody {
 /** Actual cost from the response's token counts; undefined when usage is missing. */
 export function costFromUsage(usage: Usage | undefined, rates: Rates): number | undefined {
   if (typeof usage?.input_tokens !== "number" || typeof usage.output_tokens !== "number") return undefined;
-  const details = usage.input_tokens_details;
-  // Without a breakdown, bill all input at the higher (image) rate rather than under-count.
-  const textIn = details?.text_tokens ?? 0;
-  const imageIn = details ? (details.image_tokens ?? 0) : usage.input_tokens;
+  const textIn = usage.input_tokens_details?.text_tokens ?? 0;
+  // Input the breakdown doesn't account for (or all of it, without one) is billed
+  // at the higher image rate rather than under-counted.
+  const imageIn = Math.max(0, usage.input_tokens - textIn);
   return roundUsd((textIn * rates.textInput + imageIn * rates.imageInput + usage.output_tokens * rates.imageOutput) / 1e6);
 }
 

@@ -283,6 +283,13 @@ describe("costFromUsage", () => {
     expect(costFromUsage({ input_tokens: 100, output_tokens: 0 }, rates)).toBe(0.0008);
   });
 
+  it("prices input missing from a partial breakdown at the image rate", () => {
+    expect(costFromUsage({ input_tokens: 50, output_tokens: 0, input_tokens_details: {} }, rates)).toBe(0.0004);
+    expect(
+      costFromUsage({ input_tokens: 50, output_tokens: 0, input_tokens_details: { text_tokens: 20 } }, rates),
+    ).toBe((20 * 5 + 30 * 8) / 1e6);
+  });
+
   it("returns undefined without usage", () => {
     expect(costFromUsage(undefined, rates)).toBeUndefined();
     expect(costFromUsage({ input_tokens: 10 }, rates)).toBeUndefined();
