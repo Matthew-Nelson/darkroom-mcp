@@ -31,8 +31,10 @@ export const OPENAI_RATES: Record<string, Rates> = {
 };
 
 // Output image tokens per megapixel, used only for the up-front estimate that the
-// ledger reserves. Deliberately high: settling replaces it with the actual cost.
-const ESTIMATED_TOKENS_PER_MP: Record<OpenAIQuality, number> = { low: 600, medium: 1200, high: 2500 };
+// ledger reserves against the cap; settling replaces it with the actual cost. Meant
+// to err high, but not yet checked against real calls: the M2 benchmark sets them.
+// (gpt-image-1 used ~4,160 tokens for a high-quality 1024×1024 image.)
+const ESTIMATED_TOKENS_PER_MP: Record<OpenAIQuality, number> = { low: 600, medium: 2200, high: 4500 };
 // Generous allowance for the prompt's text tokens (a 4,000-character prompt is ~1,000).
 const ESTIMATED_PROMPT_TOKENS = 1500;
 

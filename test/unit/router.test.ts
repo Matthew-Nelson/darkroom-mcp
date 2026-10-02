@@ -141,6 +141,23 @@ describe("Router spend", () => {
     expect(await ledger.spentTodayUsd()).toBe(0.05);
   });
 
+  it("records an actual cost above the estimate, and warns about it", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      const openai = paidProvider({
+        generate: () =>
+          Promise.resolve({ png: Buffer.from("x"), model: "gpt", width: 1, height: 1, seed: null, actualCostUsd: 0.12 }),
+      });
+      await router("openai", { openai }).generate(req, { signal });
+      expect(await ledger.spentTodayUsd()).toBe(0.12);
+      expect(stderr).toHaveBeenCalledWith(
+        '[darkroom] warn: actual cost exceeded the estimate {"provider":"openai","estimate_usd":0.08,"actual_usd":0.12}\n',
+      );
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it("keeps the estimate when a paid provider reports no actual cost", async () => {
     const openai = paidProvider({
       generate: () => Promise.resolve({ png: Buffer.from("x"), model: "gpt", width: 1, height: 1, seed: null }),

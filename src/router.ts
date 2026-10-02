@@ -108,6 +108,14 @@ export class Router {
         throw err;
       }
       if (reservation) {
+        if (result.actualCostUsd !== undefined && result.actualCostUsd > reservation.estimateUsd) {
+          // The cap was checked against the estimate, so a low one lets in-flight calls overshoot it.
+          log("warn", "actual cost exceeded the estimate", {
+            provider: name,
+            estimate_usd: reservation.estimateUsd,
+            actual_usd: result.actualCostUsd,
+          });
+        }
         await this.ledger.settle(reservation, result.actualCostUsd).catch((err: unknown) => {
           // The image was paid for either way; the reservation still counts its estimate.
           log("error", "could not settle spend reservation", { error: errorMessage(err) });
