@@ -35,7 +35,7 @@ export const OPENAI_RATES: Record<string, Rates> = {
 // 2026, gpt-image-2.5-flare): tokens don't follow pixel count, and a square is the most
 // expensive shape (low: 171 at 1:1, ~117 at 3:2; high: 1,756 at 1:1, 987 at 16:9).
 // draft is the measured square count plus ~25%. final (medium) wasn't measured:
-// third-party counts, which matched our low and high, put a medium square at ~439,
+// third-party counts (exact on high: 1,756; 196 vs our 171 on low) put a medium square at ~439,
 // so 700 leaves extra room. The router warns if an actual cost beats its estimate.
 const ESTIMATED_OUTPUT_TOKENS: Record<Quality, number> = { draft: 215, final: 700 };
 

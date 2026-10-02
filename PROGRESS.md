@@ -112,7 +112,7 @@ Docs checked: OpenAI pricing page and image generation guide (`developers.openai
 - OpenAI is fast (8–19 s versus 100 s for a local draft) and spelled the test word right every time; Z-Image misspelled it once at draft size.
 - The response includes an undocumented `data[].generation_id`; `revised_prompt` is absent for these models.
 - Claude Code passes its own environment to stdio MCP servers, so keys can stay out of `~/.claude.json`.
-- **Decision (Matt, after viewing the images): `final` uses `medium`, not `high`.** `high` cost ~10× the `low` draft for little visible gain. `medium` wasn't measured; its estimate (700 tokens, ~$0.021) is set above the third-party count of ~439 tokens for a square (which matched our `low` and `high` measurements), and the router warns if a real cost exceeds it. Benchmark images: `~/.darkroom/benchmark-m2/`.
+- **Decision (Matt, after viewing the images): `final` uses `medium`, not `high`.** `high` cost ~10× the `low` draft for little visible gain. `medium` wasn't measured; its estimate (700 tokens, ~$0.021) is set above the third-party count of ~439 tokens for a square (that source was exact on our `high` square, 1,756 tokens, and close on `low`, 196 vs. 171), and the router warns if a real cost exceeds it. Benchmark images: `~/.darkroom/benchmark-m2/`.
 
 ### Oct 2, 2026 — post-M1 fixes from the baseline review
 
