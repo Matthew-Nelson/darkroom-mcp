@@ -61,12 +61,14 @@ claude mcp add darkroom \
   -- node "$PWD/dist/index.js"
 ```
 
-Keep the key out of `~/.claude.json` (which `claude mcp add -e` would write it into). On macOS, store it in the Keychain and launch Claude Code with it in the environment:
+Keep the key out of `~/.claude.json` (which `claude mcp add -e` would write it into). Darkroom inherits Claude Code's environment, so on macOS you can store the key in the Keychain and launch Claude Code with it set. Copy the key, then:
 
 ```sh
-security add-generic-password -a "$USER" -s darkroom-openai -w   # prompts for the key
+security add-generic-password -U -a "$USER" -s darkroom-openai -w "$(pbpaste)" && pbcopy </dev/null
 DARKROOM_OPENAI_API_KEY=$(security find-generic-password -s darkroom-openai -w) claude
 ```
+
+Pass the key with `-w "$(pbpaste)"` as shown: `-w` with no value prompts for it, and macOS's password prompt silently cuts input at 128 characters, shorter than an OpenAI project key (about 164). `pbpaste | wc -c` should print about 165 before you run it.
 
 For the key itself, a restricted key (Images: Write only) in a dedicated OpenAI project with its own budget limits the damage if it ever leaks.
 
@@ -78,6 +80,17 @@ For the key itself, a restricted key (Images: Write only) in a dedicated OpenAI 
 | `final` | `high` | 1024×1024 / 1360×768 (same as local) |
 
 OpenAI has no seed control, and it doesn't take a negative prompt; both are reported in `ignored_params`.
+
+**What it costs.** Measured Oct 2, 2026 with `gpt-image-2.5-flare` (prompt of about 100 characters):
+
+| Request | Size | Time | Cost |
+| --- | --- | --- | --- |
+| `draft`, 1:1 | 816×816 | 10 s | $0.0053 |
+| `draft`, 3:2 | 992×672 | 8 s | $0.0037 |
+| `final`, 1:1 | 1024×1024 | 19 s | $0.0528 |
+| `final`, 16:9 | 1360×768 | 14 s | $0.0298 |
+
+Square images cost the most; wide ones use fewer tokens despite having as many pixels. The default $2.00 daily cap covers about 37 square finals or 375 drafts. Before each request Darkroom reserves an estimate of about $0.007 for a draft and $0.066 for a final (the square cost plus about 25%), and logs a warning if a real cost ever exceeds its estimate.
 
 **Spend cap.** Every paid request first reserves its estimated cost against `DARKROOM_DAILY_CAP_USD` (default $2.00) and is refused, before anything is sent, if that would go over. Afterwards the reservation becomes the actual cost OpenAI reports from token usage. A request that fails in a way OpenAI may still have billed (a timeout, a dropped connection, a server error) keeps its estimate; one rejected up front (a bad key, a blocked prompt) counts nothing.
 
