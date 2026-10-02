@@ -29,6 +29,7 @@ interface FakeOptions {
   unreachable?: boolean | "bad port";
   missingClasses?: string[];
   missingModels?: string[];
+  junkFrames?: string[]; // sent on the socket before the recorded messages
 }
 
 function fakeComfy(o: FakeOptions = {}) {
@@ -60,6 +61,7 @@ function fakeComfy(o: FakeOptions = {}) {
       promptId = (body as { prompt_id: string }).prompt_id;
       const recorded = fixture("ws-messages.json");
       setTimeout(() => {
+        for (const frame of o.junkFrames ?? []) for (const s of sockets) s.emit(frame);
         for (const msg of rekey(recorded, "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15", promptId) as unknown[]) {
           for (const s of sockets) s.emit(JSON.stringify(msg));
         }
@@ -261,6 +263,13 @@ describe("comfyui provider: progress", () => {
     const steps = updates.filter((u) => u.step !== undefined);
     expect(steps.map((u) => u.message)).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map((n) => `Sampling step ${n}/8`));
     expect(steps.at(-1)).toMatchObject({ step: 8, totalSteps: 8 });
+  });
+
+  it("ignores socket frames that aren't JSON objects", async () => {
+    const comfy = fakeComfy({ junkFrames: ["null", "42", '"text"', "[]", "not json"] });
+    const updates: ProgressUpdate[] = [];
+    await expect(comfy.provider().generate(request, signal(), (u) => updates.push(u))).resolves.toMatchObject({ width: 8 });
+    expect(updates.map((u) => u.message)).toContain("Started in ComfyUI");
   });
 
   it("doesn't open a socket when nobody listens for progress", async () => {

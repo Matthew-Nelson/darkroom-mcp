@@ -120,12 +120,15 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
     socket.addEventListener("error", () => undefined);
     socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return; // binary messages are latent previews
-      let msg: SocketMessage;
+      let parsed: unknown;
       try {
-        msg = JSON.parse(event.data) as SocketMessage;
+        parsed = JSON.parse(event.data);
       } catch {
         return;
       }
+      // A throw here would crash the server (listener errors are uncaught), so drop anything that isn't an object.
+      if (typeof parsed !== "object" || parsed === null) return;
+      const msg = parsed as SocketMessage;
       const data = msg.data ?? {};
       if (!isOurs(data.prompt_id)) return;
       if (msg.type === "execution_start") {
