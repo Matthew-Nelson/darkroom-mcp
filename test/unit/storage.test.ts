@@ -66,6 +66,13 @@ describe("Storage", () => {
     expect(dirname(saved.pngPath)).toBe(storage.root);
   });
 
+  it("recreates the output directory if it's deleted while the server runs", async () => {
+    const storage = await Storage.open(join(dir, "images"));
+    await rm(storage.root, { recursive: true });
+    const saved = await storage.save("x", png, {});
+    expect(await readFile(saved.pngPath)).toEqual(png);
+  });
+
   it("writes the PNG and a JSON sidecar with a unique suffix", async () => {
     const storage = await Storage.open(dir);
     const saved = await storage.save("My Hero", png, { provider: "mock", seed: 7 });

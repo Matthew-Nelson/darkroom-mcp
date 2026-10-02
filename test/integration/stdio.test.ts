@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -124,6 +124,25 @@ describe("darkroom over stdio", () => {
     if (text?.type !== "text") throw new Error("expected a text block");
     expect(text.text).toContain(`Saved ${pngPath}`);
     expect(text.text).toContain("Ignored by this provider: negative_prompt.");
+  });
+
+  it("keeps a generated image in the temp folder when the output directory can't be written", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
+    await rm(outputDir, { recursive: true });
+    await writeFile(outputDir, "a file where the output directory should be");
+
+    const result = await call(c, { prompt: "rescue me" });
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    const text = block?.type === "text" ? block.text : "";
+    const rescued = /The image was kept at (\S+\.png) instead\./.exec(text)?.[1];
+    expect(text).toMatch(/^Generated an image with mock \(\$0\.00\), but couldn't save it to /);
+    expect(rescued).toBeDefined();
+    try {
+      expect((await sharp(rescued).metadata()).format).toBe("png");
+    } finally {
+      if (rescued) await rm(rescued, { force: true });
+    }
   });
 
   it("applies defaults: 1:1 draft", async () => {
