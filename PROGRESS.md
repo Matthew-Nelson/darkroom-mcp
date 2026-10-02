@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M2 — Ledger + first paid provider · status: done once tagged `m2` (PR #5 approved)
+## Current: M3 — Router and guardrails · status: not started
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -8,7 +8,7 @@
 | Spike: local models on ComfyUI | done | — |
 | M0: Scaffold and mock | done | `m0` |
 | M1: Local generation (Z-Image) | done | `m1` |
-| M2: Ledger + first paid provider | awaiting review | — |
+| M2: Ledger + first paid provider | done | `m2` |
 | M3: Router and guardrails | not started | — |
 | M4: Ship it | not started | — |
 
@@ -36,13 +36,12 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] Done when: the same prompt and aspect ratio run on mock, comfyui, and openai by changing only `provider`
 - [x] Done when: a paid request over the cap is refused
 - [x] Matt approved PR #5 (after two multi-model reviews; all findings worth fixing were fixed)
-- [ ] Merged and tagged `m2`
+- [x] Merged (PR #5) and tagged `m2` (the tag was moved onto the merge of the wrap-up docs PR, at Matt's request)
 
 ## Next up
 
-- Merge PR #5, tag `m2` on `main`, push the tag, then stop for `/clear`.
-- `final` on OpenAI uses `medium` (Matt's call after the benchmark); its cost is unmeasured, so check the first real `medium` image's `cost_usd` against the ~$0.021 estimate.
-- Then M3: fallback on failure, health caching, `list_providers`, `list_images`.
+- Plan M3 (fallback on failure with paid gating on every step, 60s health caching, refusal handling, `list_providers`, `list_images`) and give Matt a short plan before coding.
+- Open process question for Matt: `CLAUDE.md` says one PR per reviewable slice, but M2 shipped as one PR at his request. Ask whether M3 should be one PR or slices.
 
 ## Deviations from spec
 
@@ -69,6 +68,10 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - License: `package.json` says `UNLICENSED` for now. Pick one before publishing in M4.
 
 ## Log
+
+### Oct 2, 2026 — M2 done (tagged `m2`)
+
+Matt approved and PR #5 was merged (merge commit). The first real `medium` final came from Matt's own side-by-side run (`fox-cafe-openai-a651a4cd.png`): 3:2 at 1248×832, 10.8 s, **$0.008875** actual, against a $0.021245 reservation. From the cost, that's about 290 image tokens; scaled by the 3:2-to-square ratio seen for drafts, a `medium` square is ~425 tokens (~$0.013), in line with the third-party ~439. No over-estimate warning; the 700-token estimate stays. Ledger total for the day: $0.1004 (plus ~$0.005 for the contract run outside it). A wrap-up docs PR recorded this, and `m2` was moved onto its merge.
 
 ### Oct 2, 2026 — second review of PR #5
 
