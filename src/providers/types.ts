@@ -41,11 +41,25 @@ export interface ImageProvider {
   generate(req: GenerateRequest, signal: AbortSignal, onProgress?: ProgressListener): Promise<GenerateResult>;
 }
 
+// A provider failure. `notCharged: true` means the request certainly cost
+// nothing (e.g. rejected before generation), so the router releases its spend
+// reservation; any other failure of a paid call keeps the reservation, on the
+// assumption that the provider may have charged.
+export class ProviderError extends Error {
+  readonly notCharged: boolean;
+
+  constructor(message: string, opts: { notCharged?: boolean } = {}) {
+    super(message);
+    this.name = "ProviderError";
+    this.notCharged = opts.notCharged ?? false;
+  }
+}
+
 // A policy refusal from the provider. Never triggers fallback, so a refused
 // prompt is not shopped around to other (possibly paid) providers.
-export class ContentRefusedError extends Error {
-  constructor(message: string) {
-    super(message);
+export class ContentRefusedError extends ProviderError {
+  constructor(message: string, opts: { notCharged?: boolean } = {}) {
+    super(message, opts);
     this.name = "ContentRefusedError";
   }
 }

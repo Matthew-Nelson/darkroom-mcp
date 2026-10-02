@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "./config.js";
+import { Ledger } from "./ledger.js";
 import { createProviders } from "./providers/registry.js";
 import { Router } from "./router.js";
 import { Storage } from "./storage.js";
@@ -11,7 +12,7 @@ const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url),
 
 export async function createServer(config: Config): Promise<McpServer> {
   const storage = await Storage.open(config.outputDir);
-  const router = new Router(config, await createProviders(config));
+  const router = new Router(config, await createProviders(config), Ledger.inDir(storage.root));
   const server = new McpServer({ name: "darkroom", title: "Darkroom", version: pkg.version });
   registerGenerateImage(server, { router, storage });
   return server;

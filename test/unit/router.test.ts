@@ -1,10 +1,26 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig, type ProviderName } from "../../src/config.js";
-import type { GenerateRequest, ImageProvider } from "../../src/providers/types.js";
+import { Ledger, LEDGER_FILENAME } from "../../src/ledger.js";
+import { ContentRefusedError, ProviderError, type GenerateRequest, type ImageProvider } from "../../src/providers/types.js";
 import { NoProviderError, Router } from "../../src/router.js";
 
 const req: GenerateRequest = { prompt: "a mug", aspectRatio: "1:1", quality: "draft" };
 const signal = new AbortController().signal;
+
+let dir: string;
+let ledger: Ledger;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), "darkroom-router-"));
+  ledger = Ledger.inDir(dir);
+});
+
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
 
 function fakeProvider(name: string, over: Partial<ImageProvider> = {}): ImageProvider {
   return {
@@ -20,12 +36,30 @@ function fakeProvider(name: string, over: Partial<ImageProvider> = {}): ImagePro
   };
 }
 
-function router(order: string, providers: Partial<Record<ProviderName, ImageProvider>>): Router {
-  const map = new Map(Object.entries(providers) as [ProviderName, ImageProvider][]);
-  return new Router(loadConfig({ DARKROOM_PROVIDER_ORDER: order }), map);
+function paidProvider(over: Partial<ImageProvider> = {}): ImageProvider {
+  return fakeProvider("openai", {
+    isPaid: true,
+    estimateCostUsd: () => 0.08,
+    generate: vi.fn(() =>
+      Promise.resolve({ png: Buffer.from("x"), model: "gpt", width: 1, height: 1, seed: null, actualCostUsd: 0.05 }),
+    ),
+    ...over,
+  });
 }
 
-describe("Router (M0)", () => {
+const sick = (name: string) =>
+  fakeProvider(name, { healthCheck: () => Promise.resolve({ ok: false, detail: "connection refused" }) });
+
+function router(
+  order: string,
+  providers: Partial<Record<ProviderName, ImageProvider>>,
+  env: Record<string, string> = {},
+): Router {
+  const map = new Map(Object.entries(providers) as [ProviderName, ImageProvider][]);
+  return new Router(loadConfig({ DARKROOM_PROVIDER_ORDER: order, ...env }), map, ledger);
+}
+
+describe("Router", () => {
   it("uses the first provider in the order", async () => {
     const routed = await router("mock", { mock: fakeProvider("mock") }).generate(req, { signal });
     expect(routed.provider.name).toBe("mock");
@@ -39,11 +73,11 @@ describe("Router (M0)", () => {
   });
 
   it("skips unhealthy providers and reports the health detail", async () => {
-    const sick = fakeProvider("comfyui", { healthCheck: () => Promise.resolve({ ok: false, detail: "connection refused" }) });
-    const routed = await router("comfyui,mock", { comfyui: sick, mock: fakeProvider("mock") }).generate(req, { signal });
+    const comfyui = sick("comfyui");
+    const routed = await router("comfyui,mock", { comfyui, mock: fakeProvider("mock") }).generate(req, { signal });
     expect(routed.provider.name).toBe("mock");
     expect(routed.skipped).toEqual([{ provider: "comfyui", reason: "unhealthy: connection refused" }]);
-    expect(sick.generate).not.toHaveBeenCalled();
+    expect(comfyui.generate).not.toHaveBeenCalled();
   });
 
   it("treats a throwing health check as unhealthy", async () => {
@@ -54,15 +88,7 @@ describe("Router (M0)", () => {
     expect(routed.skipped).toEqual([{ provider: "comfyui", reason: "unhealthy: boom" }]);
   });
 
-  it("never calls a paid provider before the ledger exists", async () => {
-    const paid = fakeProvider("openai", { isPaid: true });
-    const r = router("openai", { openai: paid });
-    await expect(r.generate(req, { signal })).rejects.toThrow(NoProviderError);
-    await expect(r.generate(req, { provider: "openai", signal })).rejects.toThrow(/paid providers/);
-    expect(paid.generate).not.toHaveBeenCalled();
-  });
-
-  it("fails clearly with the default order, since comfyui isn't implemented yet", async () => {
+  it("fails clearly when nothing in the order can run", async () => {
     const err = await router("comfyui", { mock: fakeProvider("mock") })
       .generate(req, { signal })
       .catch((e: unknown) => e);
@@ -92,5 +118,185 @@ describe("Router (M0)", () => {
     const controller = new AbortController();
     await router("mock", { mock }).generate(req, { signal: controller.signal });
     expect(mock.generate).toHaveBeenCalledWith(req, controller.signal, undefined);
+  });
+
+  it("propagates a provider failure without trying the next provider (fallback is M3)", async () => {
+    const mock = fakeProvider("mock");
+    const comfyui = fakeProvider("comfyui", { generate: () => Promise.reject(new Error("GPU fell over")) });
+    await expect(router("comfyui,mock", { comfyui, mock }).generate(req, { signal })).rejects.toThrow("GPU fell over");
+    expect(mock.generate).not.toHaveBeenCalled();
+  });
+});
+
+describe("Router spend", () => {
+  it("reserves a paid call's estimate, then settles to the actual cost", async () => {
+    const openai = paidProvider({
+      generate: vi.fn(async () => {
+        expect(await ledger.spentTodayUsd()).toBe(0.08); // reserved before the call
+        return { png: Buffer.from("x"), model: "gpt", width: 1, height: 1, seed: null, actualCostUsd: 0.05 };
+      }),
+    });
+    const routed = await router("openai", { openai }).generate(req, { signal });
+    expect(routed.provider.name).toBe("openai");
+    expect(await ledger.spentTodayUsd()).toBe(0.05);
+  });
+
+  it("keeps the estimate when a paid provider reports no actual cost", async () => {
+    const openai = paidProvider({
+      generate: () => Promise.resolve({ png: Buffer.from("x"), model: "gpt", width: 1, height: 1, seed: null }),
+    });
+    await router("openai", { openai }).generate(req, { signal });
+    expect(await ledger.spentTodayUsd()).toBe(0.08);
+  });
+
+  it("never records spend for free providers", async () => {
+    await router("mock", { mock: fakeProvider("mock", { estimateCostUsd: () => 1 }) }).generate(req, { signal });
+    expect(await ledger.spentTodayUsd()).toBe(0);
+  });
+
+  it("refuses an explicit paid request over the cap without calling the provider", async () => {
+    const openai = paidProvider();
+    const err = await router("openai", { openai }, { DARKROOM_DAILY_CAP_USD: "0.05" })
+      .generate(req, { provider: "openai", signal })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NoProviderError);
+    expect((err as Error).message).toMatch(
+      /^No image provider could take this request \(openai: daily spend cap reached: \$0\.00 of \$0\.05/,
+    );
+    expect(openai.generate).not.toHaveBeenCalled();
+    expect(await ledger.spentTodayUsd()).toBe(0);
+  });
+
+  it("refuses once earlier calls have used up the cap", async () => {
+    const openai = paidProvider();
+    const r = router("openai", { openai }, { DARKROOM_DAILY_CAP_USD: "0.10" });
+    await r.generate(req, { signal }); // reserves 0.08, settles at 0.05
+    await expect(r.generate(req, { signal })).rejects.toThrow(/daily spend cap reached: \$0\.05 of \$0\.10/);
+    expect(openai.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the cap under parallel calls", async () => {
+    const openai = paidProvider();
+    const r = router("openai", { openai }, { DARKROOM_DAILY_CAP_USD: "0.20" });
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => r.generate(req, { signal })));
+    // Each reserves 0.08 up front, so only two fit under 0.20 even though each settles at 0.05.
+    expect(results.filter((x) => x.status === "fulfilled")).toHaveLength(2);
+    expect(openai.generate).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the reservation when a paid call fails ambiguously", async () => {
+    const openai = paidProvider({ generate: () => Promise.reject(new Error("socket hang up")) });
+    await expect(router("openai", { openai }).generate(req, { signal })).rejects.toThrow("socket hang up");
+    expect(await ledger.spentTodayUsd()).toBe(0.08);
+  });
+
+  it("releases the reservation when the provider says nothing was charged", async () => {
+    const openai = paidProvider({
+      generate: () => Promise.reject(new ProviderError("HTTP 401", { notCharged: true })),
+    });
+    await expect(router("openai", { openai }).generate(req, { signal })).rejects.toThrow("HTTP 401");
+    expect(await ledger.spentTodayUsd()).toBe(0);
+  });
+
+  it("returns a refusal as-is and releases its reservation when it wasn't charged", async () => {
+    const mock = fakeProvider("mock");
+    const openai = paidProvider({
+      generate: () => Promise.reject(new ContentRefusedError("moderation_blocked", { notCharged: true })),
+    });
+    await expect(router("openai,mock", { openai, mock }).generate(req, { signal })).rejects.toThrow(
+      ContentRefusedError,
+    );
+    expect(mock.generate).not.toHaveBeenCalled();
+    expect(await ledger.spentTodayUsd()).toBe(0);
+  });
+
+  it("doesn't call a paid provider when the ledger is unreadable", async () => {
+    await writeFile(join(dir, LEDGER_FILENAME), "garbage");
+    const openai = paidProvider();
+    await expect(router("openai", { openai }).generate(req, { signal })).rejects.toThrow(/spend ledger .* is corrupt/);
+    expect(openai.generate).not.toHaveBeenCalled();
+  });
+
+  it("doesn't reserve for an unhealthy paid provider (e.g. no key)", async () => {
+    const openai = paidProvider({
+      healthCheck: () => Promise.resolve({ ok: false, detail: "set DARKROOM_OPENAI_API_KEY" }),
+    });
+    await expect(router("openai", { openai }).generate(req, { signal })).rejects.toThrow(
+      "No image provider could take this request (openai: unhealthy: set DARKROOM_OPENAI_API_KEY).",
+    );
+    expect(await ledger.spentTodayUsd()).toBe(0);
+  });
+});
+
+describe("Router paid gate", () => {
+  const GATED =
+    "not used because comfyui was skipped and this provider costs money; DARKROOM_ALLOW_PAID_FALLBACK=true allows this";
+
+  it("doesn't step from an unhealthy free provider to a paid one by default", async () => {
+    const openai = paidProvider();
+    const err = await router("comfyui,openai", { comfyui: sick("comfyui"), openai })
+      .generate(req, { signal })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NoProviderError);
+    expect((err as NoProviderError).skipped).toEqual([
+      { provider: "comfyui", reason: "unhealthy: connection refused" },
+      { provider: "openai", reason: GATED },
+    ]);
+    expect(openai.generate).not.toHaveBeenCalled();
+    expect(await ledger.spentTodayUsd()).toBe(0);
+  });
+
+  it("doesn't step from an unavailable provider to a paid one by default", async () => {
+    const openai = paidProvider();
+    await expect(router("comfyui,openai", { openai }).generate(req, { signal })).rejects.toThrow(NoProviderError);
+    expect(openai.generate).not.toHaveBeenCalled();
+  });
+
+  it("does step to the paid provider with DARKROOM_ALLOW_PAID_FALLBACK=true, and says why", async () => {
+    const openai = paidProvider();
+    const routed = await router(
+      "comfyui,openai",
+      { comfyui: sick("comfyui"), openai },
+      { DARKROOM_ALLOW_PAID_FALLBACK: "true" },
+    ).generate(req, { signal });
+    expect(routed.provider.name).toBe("openai");
+    expect(routed.skipped).toEqual([{ provider: "comfyui", reason: "unhealthy: connection refused" }]);
+  });
+
+  it("still applies the cap after an allowed fallback", async () => {
+    const openai = paidProvider();
+    await expect(
+      router(
+        "comfyui,openai",
+        { comfyui: sick("comfyui"), openai },
+        { DARKROOM_ALLOW_PAID_FALLBACK: "true", DARKROOM_DAILY_CAP_USD: "0" },
+      ).generate(req, { signal }),
+    ).rejects.toThrow(/openai: daily spend cap reached/);
+    expect(openai.generate).not.toHaveBeenCalled();
+  });
+
+  it("uses a paid provider listed first, since no free provider was skipped", async () => {
+    const routed = await router("openai,comfyui", { openai: paidProvider(), comfyui: fakeProvider("comfyui") }).generate(
+      req,
+      { signal },
+    );
+    expect(routed.provider.name).toBe("openai");
+  });
+
+  it("lets an explicit paid choice through even when a free provider is down", async () => {
+    const routed = await router("comfyui,openai", { comfyui: sick("comfyui"), openai: paidProvider() }).generate(req, {
+      provider: "openai",
+      signal,
+    });
+    expect(routed.provider.name).toBe("openai");
+    expect(routed.skipped).toEqual([]);
+  });
+
+  it("moves on from a paid provider to a free one without the flag", async () => {
+    const routed = await router("openai,mock", { openai: paidProvider(), mock: fakeProvider("mock") }, {
+      DARKROOM_DAILY_CAP_USD: "0",
+    }).generate(req, { signal });
+    expect(routed.provider.name).toBe("mock");
+    expect(routed.skipped[0]?.reason).toMatch(/^daily spend cap reached/);
   });
 });
