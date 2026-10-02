@@ -4,7 +4,7 @@ Oct 2, 2026 · @Matt
 
 ## Overview
 
-Darkroom is a TypeScript MCP server that gives Claude Code an image generation tool through swappable providers: a free local model (Flux via ComfyUI) by default, with OpenAI and Gemini as paid options. Claude writes the prompt, calls the tool, sees the returned image, and iterates; Darkroom handles routing, fallback, spend limits, and saving files with metadata.
+Darkroom is a TypeScript MCP server that gives Claude Code an image generation tool through swappable providers: a free local model (Z-Image Turbo via ComfyUI) by default, with OpenAI and Gemini as paid options. Claude writes the prompt, calls the tool, sees the returned image, and iterates; Darkroom handles routing, fallback, spend limits, and saving files with metadata.
 
 It is both a tool Matt will actually use and a resume project that demonstrates MCP, provider abstraction, cost guardrails, and testing discipline.
 
@@ -19,7 +19,7 @@ The v1 bar is three working tools, three providers (mock, local, one paid) behin
 3. Never spend money silently: paid providers are opt-in by explicit config (not by the mere presence of an API key), with a daily spend cap and a cost on every result.
 4. Return the image to Claude so it can critique and refine its own output.
 5. Ship resume-grade: tests, a small eval report, a README with a demo GIF, and an npm package.
-6. Have fun and keep scope tight: v1 in roughly two weekends, with the second paid provider and the SDXL template as the first post-v1 commits.
+6. Have fun and keep scope tight: v1 in roughly two weekends, with the second paid provider and the Flux/SDXL templates as the first post-v1 commits.
 
 **Non-goals for v1**
 
@@ -54,7 +54,7 @@ v1 exposes exactly three tools; anything more waits for Phase 2.
 
 | Tool | Inputs | Returns |
 | --- | --- | --- |
-| `generate_image` | `prompt` (required), `negative_prompt`, `aspect_ratio` (enum: `1:1` default, `3:2`, `2:3`, `16:9`, `9:16`), `provider` (optional override), `seed`, `filename` | An MCP image content block (a downscaled JPEG preview, max 768px on the long edge, for Claude to see) plus text and `structuredContent` with the absolute file path, provider, model, actual pixel size, seed (or null), latency in ms, cost in USD (actual when the provider reports it, otherwise the estimate), ignored parameters, and any skipped providers with reasons |
+| `generate_image` | `prompt` (required), `negative_prompt`, `aspect_ratio` (enum: `1:1` default, `3:2`, `2:3`, `16:9`, `9:16`), `quality` (enum: `draft` default, `final`), `provider` (optional override), `seed`, `filename` | An MCP image content block (a downscaled JPEG preview, max 768px on the long edge, for Claude to see) plus text and `structuredContent` with the absolute file path, provider, model, actual pixel size, seed (or null), latency in ms, cost in USD (actual when the provider reports it, otherwise the estimate), ignored parameters, and any skipped providers with reasons |
 | `list_providers` | none | Each provider's name, model, enabled/healthy status, whether it costs money, estimated cost per image, and today's spend vs. the cap |
 | `list_images` | `limit` (default 20), `provider` filter | Recent generations from the metadata sidecars: path, prompt, provider, timestamp, cost |
 
@@ -62,7 +62,9 @@ v1 exposes exactly three tools; anything more waits for Phase 2.
 
 Every saved image gets a JSON sidecar next to it (`image.png` + `image.json`) holding the full request, the resolved provider and model, actual size, seed, latency, cost, and timestamp. Filenames never overwrite: a short unique id is always appended to the sanitized slug.
 
-Tool descriptions must be written for the model: say when to use the tool, that local generation is the default, that results come back as viewable images, and that **`provider` should only be passed when the user explicitly asks for a specific provider, because some providers cost money.**
+`quality` controls the size tier. `draft` renders around 512px on the short edge (about 1.5 minutes locally on a 16GB M3); `final` renders around 1024px (about 3.5 minutes locally). Claude should iterate on drafts and render `final` once the composition is right, re-using the draft's seed where the provider supports it. Paid providers may map both tiers to their cheapest size or to a quality setting; each provider documents its mapping.
+
+Tool descriptions must be written for the model: say when to use the tool, that local generation is the default, that local generation is slow (minutes, not seconds) so drafts come first, that results come back as viewable images, and that **`provider` should only be passed when the user explicitly asks for a specific provider, because some providers cost money.**
 
 ## Providers
 
@@ -70,7 +72,7 @@ v1 ships three providers, each a single file implementing the `ImageProvider` in
 
 | Provider | Cost | How it works | Notes |
 | --- | --- | --- | --- |
-| `comfyui` (default) | Free | HTTP to a local ComfyUI server: POST a workflow JSON to `/prompt`, poll `/history/{id}`, fetch bytes from `/view` | Ship one Flux workflow template in `workflows/` (SDXL follows post-v1). Inject prompt, size, and seed by locating nodes by `class_type`/title via a small mapping file next to each template, not by hard-coded node ID. Checkpoint filename comes from config. Name the exact Flux variant in the README, one Matt has actually run on his Mac, and note its license. Slow on Apple Silicon; default timeout 180s, configurable. |
+| `comfyui` (default) | Free | HTTP to a local ComfyUI server: POST a workflow JSON to `/prompt`, poll `/history/{id}`, fetch bytes from `/view` | Ship one Z-Image Turbo template (GGUF, via the ComfyUI-GGUF plugin) in `workflows/`; Flux schnell and SDXL templates follow post-v1. Inject prompt, size, and seed by locating nodes through a small mapping file next to each template, not by hard-coded node ID. The mapping file also lists the template's model filenames, so the health check can verify each one exists. Exact files, sources, and timings are in "Local model spike results" below. Slow on Apple Silicon: default timeout 300s, configurable. |
 | `openai` | Paid, about $0.04 to $0.17 per image depending on quality; token-billed, so record actual usage from the response | OpenAI Images API with a gpt-image model | Best typography and instruction following. Fixed set of supported sizes; no seed. |
 | `gemini` | Paid, about $0.04 to $0.07 per image; token-billed, so record actual usage from the response | Gemini API with a Flash Image model | Cheapest paid option. Google's image API had no free tier as of early 2026; do not assume one. Sizes are set by aspect ratio, not pixels. Send the key in the `x-goog-api-key` header, never as a `?key=` query param, so it can't leak via URLs in errors. |
 | `mock` | Free | Generates a placeholder PNG (prompt text and seed drawn on a colored background, color derived from the seed) with no network | Used in tests and CI, and for demoing without a GPU or keys. Text rendering depends on system fonts, so tests assert on dimensions and format, never on image bytes or hashes. |
@@ -102,7 +104,7 @@ interface GenerateResult {
 class ContentRefusedError extends Error {} // policy refusal; never triggers fallback
 ```
 
-Health checks are cheap and free: `comfyui` hits `/system_stats` and confirms the configured checkpoint exists via `/object_info`; paid providers check only that the provider is enabled and its key is present (no network call).
+Health checks are cheap and free: `comfyui` hits `/system_stats`, then uses `/object_info` to confirm every model file in the template's mapping is present and every node the template uses exists (for example, that the GGUF plugin is installed); paid providers check only that the provider is enabled and its key is present (no network call).
 
 ## Routing, fallback and spend cap
 
@@ -122,7 +124,7 @@ Spend is tracked in a small JSON ledger in the output directory, keyed by UTC da
 
 ## Timeouts and progress
 
-Local generation can exceed MCP client request timeouts (verify the MCP TypeScript SDK client default and Claude Code's MCP tool timeout during M1). While a provider is working, `generate_image` sends MCP progress notifications (for ComfyUI, on each `/history` poll) so clients that reset their timeout on progress don't give up. Each provider has its own configurable timeout. The ComfyUI timeout includes time spent waiting in ComfyUI's queue, since it runs one job at a time.
+Local generation takes minutes, not seconds: in the spike, every 1024px local run took 3 to 4 minutes, and even 512px drafts took about 1.5 minutes. That is longer than typical MCP client request timeouts (verify the MCP TypeScript SDK client default and Claude Code's MCP tool timeout during M1). Progress notifications are therefore **required, not optional**: while a provider is working, `generate_image` sends MCP progress notifications (for ComfyUI, on each `/history` poll, ideally carrying the sampler's step count from ComfyUI's websocket or queue status) so clients that reset their timeout on progress don't give up. If Claude Code turns out not to reset its timeout on progress, the README documents the env var that raises it. Each provider has its own configurable timeout. The ComfyUI timeout includes time spent waiting in ComfyUI's queue, since it runs one job at a time.
 
 ## Configuration and security
 
@@ -135,9 +137,8 @@ All configuration comes from environment variables, validated with zod at startu
 | `DARKROOM_DAILY_CAP_USD` | No | `2.00` | Daily paid-spend ceiling |
 | `DARKROOM_ALLOW_PAID_FALLBACK` | No | `false` | Lets the router fall from free to paid providers already in the order |
 | `COMFYUI_URL` | No | `http://127.0.0.1:8188` | Local ComfyUI server |
-| `COMFYUI_WORKFLOW` | No | `flux` | Which template in `workflows/` to use |
-| `COMFYUI_CHECKPOINT` | No | the filename in the shipped template | Model file to load, so users don't have to rename their checkpoints |
-| `COMFYUI_TIMEOUT_MS` | No | `180000` | Per-request timeout including queue wait |
+| `COMFYUI_WORKFLOW` | No | `zimage` | Which template in `workflows/` to use |
+| `COMFYUI_TIMEOUT_MS` | No | `300000` | Per-request timeout including queue wait |
 | `DARKROOM_OPENAI_API_KEY`, `DARKROOM_GEMINI_API_KEY` | No | none | Darkroom-specific keys; a paid provider needs its key **and** a place in the order |
 
 Security requirements:
@@ -169,14 +170,55 @@ The full test suite must pass in CI with no GPU, no network, and no API keys; th
 
 A fixed set of 10 prompts covering text rendering, people, objects, a UI icon, and a scene, run against every enabled provider. Paid runs go through the ledger with their own budget (`DARKROOM_EVAL_BUDGET_USD`, separate from the daily cap, since 10 prompts across two paid providers at high quality can exceed $2). Results are cached by (prompt, provider, model), so rerunning to rebuild the report doesn't spend again. It writes `eval/report.md` with a thumbnail grid plus latency and cost per provider. No automatic quality scoring in v1: the grid is for a human to judge, and the report doubles as the README's comparison section.
 
+## Local model spike results (Oct 2, 2026)
+
+Before writing provider code, we installed ComfyUI on Matt's machine and timed three candidate models through the same `/prompt` → `/history` → `/view` HTTP flow the `comfyui` provider will use.
+
+**Setup:** MacBook with Apple M3, 16GB unified memory, about 11GB free (other apps closed). ComfyUI 0.38.0 from git, its own Python 3.12 venv via `uv` (Homebrew's Python 3.14 was avoided as too new for PyTorch), PyTorch 2.14.1 on MPS, ComfyUI-GGUF plugin. Prompt: a ceramic mug on a desk by a window with "DARKROOM" printed on it (tests text rendering). Each model ran on a freshly started server, twice (seeds 42 and 7).
+
+| | SDXL base 1.0 | Flux.1 schnell (GGUF Q4_K_S) | Z-Image Turbo (GGUF Q4_K_M) |
+| --- | --- | --- | --- |
+| Steps | 25 (dpmpp_2m, karras, cfg 7) | 4 (euler, simple, cfg 1) | 8 (res_multistep, simple, cfg 1, shift 3) |
+| 1024×1024, run 1 / run 2 | 173s / 153s | 164s / 150s | 221s / 221s |
+| Seconds per step | ~6 | ~36 | ~26 |
+| Peak memory (whole GB only) | ~12GB | ~12GB | ~11–12GB |
+| Spelled "DARKROOM" | No, 0/2 ("IARKIDOM", "DarKoom") | Yes, 2/2, but wrapped around the mug and cut off | Yes, 2/2, clean and centered |
+| Download | 6.9GB | ~9.5GB | ~7.5GB |
+| License | CreativeML Open RAIL++-M | Apache 2.0 | Apache 2.0 |
+
+Z-Image Turbo at smaller sizes (measured in an earlier round with less free memory, so read these as upper bounds): **768px in 153s, 512px in 98s**, with lettering still correct at 512. Time shrinks far less than the pixel count, because a fixed cost on each step (probably unpacking the GGUF weights on MPS) dominates.
+
+**Decision:** Z-Image Turbo is the v1 default for its text rendering and composition. Flux schnell is about 30% faster per image and is the first post-v1 template; switch the default to it if speed matters more than lettering in practice.
+
+**Findings that changed the spec:**
+
+- Every local 1024px image took 2.5 to 3.7 minutes. Hence the 300s default timeout, required progress notifications, and the `quality: draft | final` tier.
+- At 16GB, the full-size Flux and Z-Image weights don't fit; GGUF builds and the ComfyUI-GGUF plugin are required. The README calls out 16GB as the minimum and recommends closing other apps.
+- Black Forest Labs' official Flux VAE (`ae.safetensors`) is gated behind a Hugging Face login. The identical file (same size and hash on every copy checked) is published ungated by Comfy-Org; the README links that copy.
+- On a fresh server, the text encoder runs on the CPU, and models reload between prompts when memory is tight, so the "second run" was often barely faster than the first. Don't promise a warm-cache speedup.
+- Background disk and network activity (model downloads) slowed Flux by about 30% in the first round. The eval should run on an otherwise idle machine.
+
+**Not yet tried:** Z-Image Q8_0 GGUF (7.2GB). It may be faster per step because Q8 is cheaper to unpack, but it could push peak memory toward 14GB.
+
+**Model files used** (all ungated, in `~/ComfyUI/models/`):
+
+| Folder | File | Source |
+| --- | --- | --- |
+| `unet/` | `z_image_turbo-Q4_K_M.gguf` | `huggingface.co/jayn7/Z-Image-Turbo-GGUF` |
+| `clip/` | `Qwen3-4B-Q4_K_M.gguf` (loader type `lumina2`) | `huggingface.co/unsloth/Qwen3-4B-GGUF` |
+| `vae/` | `flux_ae.safetensors` (shared by Z-Image and Flux) | `huggingface.co/Comfy-Org/z_image_turbo`, `split_files/vae/ae.safetensors` |
+| `unet/` | `flux1-schnell-Q4_K_S.gguf` | `huggingface.co/city96/FLUX.1-schnell-gguf` |
+| `clip/` | `t5-v1_1-xxl-encoder-Q4_K_M.gguf`, `clip_l.safetensors` | `huggingface.co/city96/t5-v1_1-xxl-encoder-gguf`, `huggingface.co/comfyanonymous/flux_text_encoders` |
+| `checkpoints/` | `sd_xl_base_1.0.safetensors` | `huggingface.co/stabilityai/stable-diffusion-xl-base-1.0` |
+
 ## Milestones and acceptance criteria
 
 Five milestones, each ending in a commit Matt can review; the agent stops after each one for a check-in rather than running ahead.
 
 1. **M0: Scaffold and mock.** Repo, TypeScript strict, lint, vitest, CI, config validation, and the `mock` provider behind `generate_image`.
    - Done when: `claude mcp add` registers the server with `DARKROOM_PROVIDER_ORDER=mock` and Claude Code returns a placeholder image it can see. Measure the preview's payload size against Claude Code's MCP output limit.
-2. **M1: Local generation.** The `comfyui` provider with the Flux template, node mapping, checkpoint config, timeouts, cancellation, progress notifications, and health checks.
-   - Done when: a real Flux image is generated from Claude Code at zero cost, saved with its sidecar, without hitting a client timeout.
+2. **M1: Local generation.** The `comfyui` provider with the Z-Image Turbo template, node mapping, `quality` tiers, timeouts, cancellation, progress notifications, and health checks.
+   - Done when: a real Z-Image `final` image is generated from Claude Code at zero cost, saved with its sidecar, without hitting a client timeout; and a health check with the GGUF plugin removed reports a clear, actionable error.
 3. **M2: Ledger and the first paid provider.** The spend ledger (reserve/settle), daily cap, enablement rules, cost reporting, then one paid provider and the provider contract suite. The cap exists before the first paid call is made.
    - Done when: the same prompt and aspect ratio run on mock, comfyui, and the paid provider by changing only `provider`, and a paid request over the cap is refused.
 4. **M3: Router and guardrails.** Provider order, fallback, paid gating on every step down the list, refusal handling, `list_providers` and `list_images`.
@@ -184,7 +226,7 @@ Five milestones, each ending in a commit Matt can review; the agent stops after 
 5. **M4: Ship it.** Eval run and report, README (setup for each provider, config table, architecture diagram, demo GIF of Claude generating, critiquing, and regenerating), npm publish.
    - Done when: a fresh machine can install it with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command and generate a mock image in under five minutes.
 
-**Immediately after v1:** add the second paid provider as a single, self-contained commit (the "one file plus one registry line" demo), then the SDXL template.
+**Immediately after v1:** add the second paid provider as a single, self-contained commit (the "one file plus one registry line" demo), then the Flux schnell and SDXL templates.
 
 ## Phase 2 stretch goals
 
@@ -218,7 +260,7 @@ darkroom-mcp/
     storage.ts        # safe paths, PNG + JSON sidecar writes, previews
     tools/            # generate-image.ts, list-providers.ts, list-images.ts
     providers/        # types.ts, registry.ts, comfyui.ts, openai.ts, gemini.ts, mock.ts
-  workflows/          # flux.json + flux.map.json (ComfyUI API-format template and node mapping)
+  workflows/          # zimage.json + zimage.map.json (ComfyUI API-format template; node + model-file mapping)
   test/               # unit, contract, integration, fixtures/
   eval/               # prompts.json, run.ts, report.md
   README.md
