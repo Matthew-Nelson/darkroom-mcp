@@ -64,7 +64,7 @@ Every saved image gets a JSON sidecar next to it (`image.png` + `image.json`) ho
 
 `quality` controls the size tier. `draft` renders around 512px on the short edge (about 1.5 minutes locally on a 16GB M3); `final` renders around 1024px (about 3.5 minutes locally). Claude should iterate on drafts and render `final` once the composition is right, re-using the draft's seed where the provider supports it. Paid providers may map both tiers to their cheapest size or to a quality setting; each provider documents its mapping.
 
-Tool descriptions must be written for the model: say when to use the tool, that local generation is the default, that local generation is slow (minutes, not seconds) so drafts come first, that results come back as viewable images, and that **`provider` should only be passed when the user explicitly asks for a specific provider, because some providers cost money.**
+Tool descriptions must be written for the model: say when to use the tool, that local generation is the default, that local generation is slow (minutes, not seconds) so drafts come first, that with the default local model a new seed gives nearly the same picture so variety comes from rewording the prompt, that results come back as viewable images, and that **`provider` should only be passed when the user explicitly asks for a specific provider, because some providers cost money.**
 
 ## Providers
 
@@ -124,7 +124,7 @@ Spend is tracked in a small JSON ledger in the output directory, keyed by UTC da
 
 ## Timeouts and progress
 
-Local generation takes minutes, not seconds: in the spike, every 1024px local run took 3 to 4 minutes, and even 512px drafts took about 1.5 minutes. That is longer than typical MCP client request timeouts (verify the MCP TypeScript SDK client default and Claude Code's MCP tool timeout during M1). Progress notifications are therefore **required, not optional**: while a provider is working, `generate_image` sends MCP progress notifications (for ComfyUI, on each `/history` poll, ideally carrying the sampler's step count from ComfyUI's websocket or queue status) so clients that reset their timeout on progress don't give up. If Claude Code turns out not to reset its timeout on progress, the README documents the env var that raises it. Each provider has its own configurable timeout. The ComfyUI timeout includes time spent waiting in ComfyUI's queue, since it runs one job at a time.
+Local generation takes minutes, not seconds: in the spike, every 1024px local run took 2.5 to 3.7 minutes, and even 512px drafts took about 1.5 minutes. That is longer than typical MCP client request timeouts (verify the MCP TypeScript SDK client default and Claude Code's MCP tool timeout during M1). Progress notifications are therefore **required, not optional**: while a provider is working, `generate_image` sends MCP progress notifications (for ComfyUI, on each `/history` poll, ideally carrying the sampler's step count from ComfyUI's websocket or queue status) so clients that reset their timeout on progress don't give up. If Claude Code turns out not to reset its timeout on progress, the README documents the env var that raises it. Each provider has its own configurable timeout. The ComfyUI timeout includes time spent waiting in ComfyUI's queue, since it runs one job at a time.
 
 ## Configuration and security
 
@@ -197,6 +197,9 @@ Z-Image Turbo at smaller sizes (measured in an earlier round with less free memo
 - Black Forest Labs' official Flux VAE (`ae.safetensors`) is gated behind a Hugging Face login. The identical file (same size and hash on every copy checked) is published ungated by Comfy-Org; the README links that copy.
 - On a fresh server, the text encoder runs on the CPU, and models reload between prompts when memory is tight, so the "second run" was often barely faster than the first. Don't promise a warm-cache speedup.
 - Background disk and network activity (model downloads) slowed Flux by about 30% in the first round. The eval should run on an otherwise idle machine.
+- **Z-Image Turbo barely varies by seed.** Seeds 42 and 7 produced nearly the same mug, angle, and window; Flux and SDXL varied far more. For Z-Image, changing the seed is not a useful way to explore; changing the prompt is. The tool description says so, and `list_providers` can expose a per-template `seedVariety: low | high` hint.
+- The 512px draft kept the composition and lettering of the 1024px render, which supports the draft → final workflow.
+- Comparison sheet and full-size images: `~/ComfyUI/output/darkroom_spike/` (outside the repo). Re-run with `scripts/bench-comfyui.py`.
 
 **Not yet tried:** Z-Image Q8_0 GGUF (7.2GB). It may be faster per step because Q8 is cheaper to unpack, but it could push peak memory toward 14GB.
 
