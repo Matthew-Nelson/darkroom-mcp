@@ -30,19 +30,21 @@ export const OPENAI_RATES: Record<string, Rates> = {
   "gpt-image-2": { textInput: 5, imageInput: 8, imageOutput: 30 },
 };
 
-// Output image tokens per megapixel, used only for the up-front estimate that the
-// ledger reserves against the cap; settling replaces it with the actual cost. Meant
-// to err high, but not yet checked against real calls: the M2 benchmark sets them.
-// (gpt-image-1 used ~4,160 tokens for a high-quality 1024×1024 image.)
-const ESTIMATED_TOKENS_PER_MP: Record<OpenAIQuality, number> = { low: 600, medium: 2200, high: 4500 };
-// Generous allowance for the prompt's text tokens (a 4,000-character prompt is ~1,000).
-const ESTIMATED_PROMPT_TOKENS = 1500;
+// Image output tokens per tier, for the up-front estimate the ledger reserves against
+// the cap; settling replaces it with the actual cost. Measured in the M2 benchmark
+// (Oct 2, 2026, gpt-image-2.5-flare): tokens don't follow pixel count, and a square is
+// the most expensive shape (draft: 171 at 1:1, ~117 at 3:2; final: 1,756 at 1:1, 987
+// at 16:9). These are the square counts plus ~25%; the router warns if one is beaten.
+const ESTIMATED_OUTPUT_TOKENS: Record<Quality, number> = { draft: 215, final: 2200 };
+
+// Prompt text tokens: the benchmark prompt ran ~3.4 characters per token; 3 errs high.
+const estimatePromptTokens = (prompt: string) => Math.ceil(prompt.length / 3) + 20;
 
 // The API requires at least this many pixels (1024×640), so "draft" can't be the
 // usual 0.25MP: it renders at the smallest allowed size and at low quality instead.
 export const MIN_PIXELS = 655_360;
 
-type OpenAIQuality = "low" | "medium" | "high";
+type OpenAIQuality = "low" | "high";
 const QUALITY: Record<Quality, OpenAIQuality> = { draft: "low", final: "high" };
 
 /** The size OpenAI renders a tier at: our pixel budget, raised to the API's minimum, in multiples of 16. */
@@ -75,9 +77,8 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
   const redact = (text: string) => redactKey(text, apiKey);
 
   function estimateCostUsd(req: GenerateRequest): number {
-    const { width, height } = openaiSize(req.aspectRatio, req.quality);
-    const outputTokens = ESTIMATED_TOKENS_PER_MP[QUALITY[req.quality]] * ((width * height) / 1e6);
-    return roundUsd((ESTIMATED_PROMPT_TOKENS * rates.textInput + outputTokens * rates.imageOutput) / 1e6);
+    const promptTokens = estimatePromptTokens(req.prompt);
+    return roundUsd((promptTokens * rates.textInput + ESTIMATED_OUTPUT_TOKENS[req.quality] * rates.imageOutput) / 1e6);
   }
 
   return {

@@ -61,7 +61,7 @@ const failure = (p: Promise<unknown>) => p.then(() => new Error("expected a fail
 
 describe("openai provider", () => {
   it("is paid, has no seed or negative prompt, and reports a cost estimate", () => {
-    const p = provider(fakeFetch(reply("generations-200.json")).fetch);
+    const p = provider(fakeFetch(reply("generations-200-low.json")).fetch);
     expect(p.name).toBe("openai");
     expect(p.isPaid).toBe(true);
     expect(p.supports).toEqual({ negativePrompt: false, seed: false });
@@ -72,6 +72,25 @@ describe("openai provider", () => {
     expect(final).toBeLessThan(0.2);
   });
 
+  it.each([
+    ["generations-200-low.json", "draft"],
+    ["generations-200-high.json", "final"],
+  ] as const)("estimates at least the recorded real cost (%s)", async (fixture, quality) => {
+    const p = provider(fakeFetch(reply(fixture)).fetch);
+    const req = { prompt: "a ceramic coffee mug on a wooden desk by a window, morning light, the mug reads DARKROOM in bold letters", aspectRatio: "1:1", quality } as const;
+    const actual = (await p.generate(req, signal)).actualCostUsd ?? 0;
+    expect(actual).toBeGreaterThan(0);
+    expect(p.estimateCostUsd(req)).toBeGreaterThanOrEqual(actual);
+    expect(p.estimateCostUsd(req)).toBeLessThan(actual * 1.5); // high, but not wildly so
+  });
+
+  it("estimates a long prompt's input tokens", () => {
+    const p = provider(fakeFetch(reply("generations-200-low.json")).fetch);
+    const short = p.estimateCostUsd(request);
+    const long = p.estimateCostUsd({ ...request, prompt: "x".repeat(4000) });
+    expect(long - short).toBeGreaterThan((1000 * 5) / 1e6); // 4,000 characters is at least ~1,000 tokens
+  });
+
   it("refuses to start with a model it has no prices for", () => {
     expect(() =>
       createOpenAIProvider({ apiKey: KEY, model: "dall-e-3", timeoutMs: 60_000, fetch: fakeFetch(reply("x")).fetch }),
@@ -79,7 +98,7 @@ describe("openai provider", () => {
   });
 
   it("is healthy with a key, and explains the missing key without one", async () => {
-    const { fetch, calls } = fakeFetch(reply("generations-200.json"));
+    const { fetch, calls } = fakeFetch(reply("generations-200-low.json"));
     expect(await provider(fetch).healthCheck()).toEqual({ ok: true });
     const health = await provider(fetch, { apiKey: undefined }).healthCheck();
     expect(health.ok).toBe(false);
@@ -88,7 +107,7 @@ describe("openai provider", () => {
   });
 
   it("won't call the API without a key", async () => {
-    const { fetch, calls } = fakeFetch(reply("generations-200.json"));
+    const { fetch, calls } = fakeFetch(reply("generations-200-low.json"));
     const err = await failure(provider(fetch, { apiKey: undefined }).generate(request, signal));
     expect(err).toBeInstanceOf(ProviderError);
     expect((err as ProviderError).notCharged).toBe(true);
@@ -96,7 +115,7 @@ describe("openai provider", () => {
   });
 
   it("posts the prompt, size, and quality with the key in a header", async () => {
-    const { fetch, calls } = fakeFetch(reply("generations-200.json"));
+    const { fetch, calls } = fakeFetch(reply("generations-200-low.json"));
     await provider(fetch).generate({ ...request, negativePrompt: "blurry", seed: 42 }, signal);
     expect(calls).toHaveLength(1);
     const [call] = calls;
@@ -115,20 +134,20 @@ describe("openai provider", () => {
   });
 
   it("renders final at about 1MP and high quality", async () => {
-    const { fetch, calls } = fakeFetch(reply("generations-200.json"));
+    const { fetch, calls } = fakeFetch(reply("generations-200-low.json"));
     await provider(fetch).generate({ ...request, aspectRatio: "16:9", quality: "final" }, signal);
     expect(calls[0]?.body).toMatchObject({ size: "1360x768", quality: "high" });
   });
 
   it("returns the PNG, its real size, no seed, and the actual cost from usage", async () => {
     const onProgress: string[] = [];
-    const result = await provider(fakeFetch(reply("generations-200.json")).fetch).generate(request, signal, (u) =>
+    const result = await provider(fakeFetch(reply("generations-200-low.json")).fetch).generate(request, signal, (u) =>
       onProgress.push(u.message),
     );
     expect((await sharp(result.png).metadata()).format).toBe("png");
     expect(result).toMatchObject({ model: "gpt-image-2.5-flare", width: 8, height: 8, seed: null });
-    // Fixture usage: 24 text input tokens at $5/M, 272 output tokens at $30/M.
-    expect(result.actualCostUsd).toBe(0.00828);
+    // Recorded usage: 29 text input tokens at $5/M, 171 output tokens at $30/M.
+    expect(result.actualCostUsd).toBe(0.005275);
     expect(onProgress).toEqual(["Waiting for OpenAI (gpt-image-2.5-flare, low quality, 816×816)"]);
   });
 
@@ -254,7 +273,7 @@ describe("openai provider", () => {
   });
 
   it("doesn't start when the signal is already aborted, and says nothing was charged", async () => {
-    const { fetch, calls } = fakeFetch(reply("generations-200.json"));
+    const { fetch, calls } = fakeFetch(reply("generations-200-low.json"));
     const err = await failure(provider(fetch).generate(request, AbortSignal.abort()));
     expect(err).toBeInstanceOf(ProviderError);
     expect(err.message).toBe("Cancelled before the request was sent to OpenAI.");

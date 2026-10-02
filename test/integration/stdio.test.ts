@@ -198,7 +198,7 @@ describe("darkroom over stdio", () => {
     const c = await connect({
       DARKROOM_PROVIDER_ORDER: "mock,openai",
       DARKROOM_OPENAI_API_KEY: FAKE_KEY,
-      DARKROOM_DAILY_CAP_USD: "0.01",
+      DARKROOM_DAILY_CAP_USD: "0.001", // below any OpenAI estimate, so the request never leaves
     });
     const args = { prompt: "a mug that says DARKROOM", aspect_ratio: "3:2" };
     expect((await call(c, { ...args, provider: "mock" })).isError).toBeFalsy();
@@ -207,7 +207,7 @@ describe("darkroom over stdio", () => {
     expect(result.isError).toBe(true);
     const [block] = result.content;
     const text = block?.type === "text" ? block.text : "";
-    expect(text).toMatch(/^No image provider could take this request \(openai: daily spend cap reached: \$0\.00 of \$0\.01/);
+    expect(text).toMatch(/^No image provider could take this request \(openai: daily spend cap reached: \$0\.00 of \$0\.00/);
     expect(text).not.toContain(FAKE_KEY);
   });
 
