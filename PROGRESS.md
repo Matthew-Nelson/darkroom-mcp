@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M2 — Ledger + first paid provider · status: not started
+## Current: M2 — Ledger + first paid provider · status: done once tagged `m2` (PR #5 approved)
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -8,7 +8,7 @@
 | Spike: local models on ComfyUI | done | — |
 | M0: Scaffold and mock | done | `m0` |
 | M1: Local generation (Z-Image) | done | `m1` |
-| M2: Ledger + first paid provider | not started | — |
+| M2: Ledger + first paid provider | awaiting review | — |
 | M3: Router and guardrails | not started | — |
 | M4: Ship it | not started | — |
 
@@ -30,13 +30,27 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] Matt approved (ran the smoke-test checklist locally: all passed)
 - [x] Tagged `m1`
 
+## M2 gates
+
+- [x] `npm run check` passes (248 tests); real contract suite passes against OpenAI (`DARKROOM_CONTRACT_OPENAI=1`, 5 tests)
+- [x] Done when: the same prompt and aspect ratio run on mock, comfyui, and openai by changing only `provider`
+- [x] Done when: a paid request over the cap is refused
+- [x] Matt approved PR #5 (after two multi-model reviews; all findings worth fixing were fixed)
+- [ ] Merged and tagged `m2`
+
 ## Next up
 
-- Decide the first paid provider (OpenAI vs. Gemini), then plan M2 (ledger, daily cap, enablement rules, first paid provider, provider contract suite) in a few bullets and confirm with Matt before coding.
-- Check current docs and prices for the chosen paid provider before writing it.
+- Merge PR #5, tag `m2` on `main`, push the tag, then stop for `/clear`.
+- `final` on OpenAI uses `medium` (Matt's call after the benchmark); its cost is unmeasured, so check the first real `medium` image's `cost_usd` against the ~$0.021 estimate.
+- Then M3: fallback on failure, health caching, `list_providers`, `list_images`.
 
 ## Deviations from spec
 
+- **The first paid provider is OpenAI, and it is now the cheaper one** (decided Oct 2, 2026, start of M2). Checked today: `gpt-image-2.5-flare` bills $30/M image output tokens, roughly $0.006 (low) to $0.05 (high) per 1024² image, and accepts any size in multiples of 16. Gemini 3.1 Flash Image is $0.045–$0.067 per image, and its Lite variant is $0.034 at 1K only. The spec called Gemini "cheapest"; SPEC.md's provider table was updated in PR #5 after review.
+- **OpenAI `draft` isn't 0.25MP** (M2). OpenAI's minimum image is 655,360 pixels, so `draft` renders at the smallest allowed size (816×816 at 1:1) at `low` quality; `final` uses the shared 1MP sizes at `medium` (Matt chose `medium` over `high` after the benchmark: `high` cost ~10× `low` for little visible gain). The spec allows per-provider tier mappings; this one is documented in the README, SPEC, and the tool's `quality` description.
+- **Paid-provider rates live in code, not env vars** (M2). SPEC said prices "live in config". The model is configurable (`DARKROOM_OPENAI_MODEL`), but per-token rates are a one-line-per-model table at the top of `openai.ts`, and an unknown model fails startup. Env vars for rates would let a typo silently under-reserve against the cap. SPEC.md updated.
+- **`config.ts` lists which providers are paid** (`PAID_PROVIDERS`), so the paid gate knows a not-yet-built `gemini` is paid. The contract suite checks every built provider's `isPaid` against it.
+- **The paid gate for skipped free providers lands in M2, not M3.** Once a paid provider can run, the stub router's unhealthy-skip would otherwise reach it. Fallback on failure stays in M3.
 - **`ImageProvider.generate` takes an optional third argument, `onProgress`** (M1). Providers report state changes ("Queued in ComfyUI", "Sampling step 3/8"); the tool turns them into MCP progress notifications with a 5s heartbeat. `progress` is elapsed seconds, since MCP requires it to increase and no provider knows the total time.
 - **Provider factories can be async, and a missing `COMFYUI_WORKFLOW` template fails startup** (M1), matching "fail fast" for config.
 - **The ComfyUI template's output node is `PreviewImage`** (ComfyUI's temp folder), not `SaveImage`, so `DARKROOM_OUTPUT_DIR` holds the only permanent copy.
@@ -50,11 +64,67 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Open questions
 
-- Which paid provider ships in v1: OpenAI (better text in images) or Gemini (cheaper)? Needed by M2.
+- ~~Which paid provider ships in v1?~~ Resolved at the start of M2: OpenAI.
 - ~~Does Claude Code reset its MCP tool timeout on progress notifications?~~ Resolved in M1: yes for the idle timeout (30 min for stdio), and the wall-clock default is ~28h. Claude Code sends a `progressToken` on every `tools/call`. Details in SPEC.md under "Timeouts and progress".
 - License: `package.json` says `UNLICENSED` for now. Pick one before publishing in M4.
 
 ## Log
+
+### Oct 2, 2026 — second review of PR #5
+
+A second multi-model review of `e54dcec` posted 6 Low findings inline on PR #5 (nothing Medium or High). Fixed, with failing tests first where code changed:
+
+- **G1:** two sessions writing the shared ledger in the same instant could erase one's fresh reservation, so that call's spend never counted. Settling now restores an erased reservation; the docs describe the race accurately. No cross-process lock (a collision now costs at most one call's amount for a few ms).
+- **A5:** the cap-refusal message rounded to cents ("$0.00 of $0.00" for a $0.001 cap); it now shows up to four decimals.
+- **A6, A3:** stale wording ("estimated at most"; `high` called the final tier).
+- **B1** (deleting the ledger resets the day's spend): documented, not changed. **A2** (deleting the output folder mid-run blocks paid calls until restart): left as is, since it fails closed.
+
+Each comment has an inline reply. `npm run check`: 248 tests.
+
+### Oct 2, 2026 — M2 built, reviewed, benchmarked; awaiting review
+
+#### Build notes
+
+Built: spend ledger (`src/ledger.ts`), paid gate and reserve → generate → settle in the router, `openai` provider, provider contract suite (`test/contract/`), README section on paid generation. All of M2 is one PR, [#5](https://github.com/Matthew-Nelson/darkroom-mcp/pull/5), at Matt's request (it was first split into four stacked PRs, then combined).
+
+Process change mid-M2: the repo moved from committing to `main` to feature branches and reviewed PRs (`CLAUDE.md`, "Branches and PRs").
+
+Docs checked: OpenAI pricing page and image generation guide (`developers.openai.com`), the Images API CLI reference (`POST /images/generations`: sizes, quality, `usage` shape), and Gemini's pricing and image generation docs, for the provider choice.
+
+**Review:** a multi-model review of `4f3ac0b` (`reviews/pr5-4f3ac0b.html`, not committed) verified 9 findings: 1 Medium (a paid image lost if saving failed) and 8 Low. All were fixed in new commits with failing tests first; the mapping is in [the PR comment](https://github.com/Matthew-Nelson/darkroom-mcp/pull/5#issuecomment-5962298030).
+
+**Benchmark and acceptance** (key in the macOS Keychain, passed through the environment; never in config, chat, or files):
+
+1. **Bad key first.** The first call returned HTTP 401: the key had been stored through `security ... -w`'s interactive prompt, which truncates at 128 characters (OpenAI project keys are 164). Nothing was charged; the ledger released the reservation, as designed. README now says to pass the key with `-w "$(pbpaste)"`.
+2. **Cost benchmark** through the real router and ledger (cap $0.50), prompt "a ceramic coffee mug on a wooden desk by a window, morning light, the mug reads DARKROOM in bold letters":
+
+   | Request | Size | Time | Image tokens | Actual | Estimate then |
+   | --- | --- | --- | --- | --- | --- |
+   | draft (low) 1:1 | 816×816 | 9.7 s | 171 | $0.005275 | $0.019485 |
+   | final (high) 1:1 | 1024×1024 | 19.0 s | 1,756 | $0.052825 | $0.149058 |
+   | final (high) 16:9 | 1360×768 | 14.4 s | 987 | $0.029755 | $0.148505 |
+
+   "DARKROOM" was spelled correctly in all three; the `low` draft looked nearly as good as the `high` square final. Tokens don't follow pixel count (16:9 used 44% fewer than 1:1 at the same pixels). Estimates were recalibrated per tier from these numbers (now about $0.007 draft, $0.066 final; tests pin each at or above the recorded cost and within 1.5×), and the recorded responses replaced the hand-made success fixture.
+3. **Real contract suite:** `DARKROOM_CONTRACT_OPENAI=1 npm run test:contract`: 5 passed (one draft, about $0.005, outside the ledger by design).
+4. **Same prompt, three providers** (fresh headless Claude Code; MCP config with `DARKROOM_PROVIDER_ORDER=comfyui,mock,openai`, key only in Claude Code's environment, which the server inherited): prompt "a lighthouse on a rocky cliff at dusk, a small sign at the gate reads DARKROOM", 3:2 draft, only `provider` changed.
+
+   | provider | model | size | latency | cost |
+   | --- | --- | --- | --- | --- |
+   | mock | mock-placeholder-v1 | 624×416 | 47 ms | $0 |
+   | comfyui | z-image-turbo-q4_k_m | 624×416 | 100 s | $0 |
+   | openai | gpt-image-2.5-flare | 992×672 | 8 s | $0.00366 (actual) |
+
+   From the previews, Claude read the sign as "DARKOOM" on comfyui (draft size) and "DARKROOM" on openai. **Pass.**
+5. **Over the cap:** same setup with `DARKROOM_DAILY_CAP_USD=0.01`, `provider: "openai"`. Claude quoted: `No image provider could take this request (openai: daily spend cap reached: $0.09 of $0.01 already spent or reserved today (UTC), and this request needs about $0.0195. Raise DARKROOM_DAILY_CAP_USD, or wait for the UTC day to roll over).` The ledger file was byte-for-byte unchanged. **Pass.**
+
+**Spend:** $0.0915 in the ledger (one released 401, four settled calls) plus about $0.005 for the contract run: about **$0.097** in total, against an agreed budget of $0.25.
+
+**Findings:**
+
+- OpenAI is fast (8–19 s versus 100 s for a local draft) and spelled the test word right every time; Z-Image misspelled it once at draft size.
+- The response includes an undocumented `data[].generation_id`; `revised_prompt` is absent for these models.
+- Claude Code passes its own environment to stdio MCP servers, so keys can stay out of `~/.claude.json`.
+- **Decision (Matt, after viewing the images): `final` uses `medium`, not `high`.** `high` cost ~10× the `low` draft for little visible gain. `medium` wasn't measured; its estimate (700 tokens, ~$0.021) is set above the third-party count of ~439 tokens for a square (that source was exact on our `high` square, 1,756 tokens, and close on `low`, 196 vs. 171), and the router warns if a real cost exceeds it. Benchmark images: `~/.darkroom/benchmark-m2/`.
 
 ### Oct 2, 2026 — post-M1 fixes from the baseline review
 

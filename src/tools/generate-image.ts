@@ -1,3 +1,7 @@
+import { randomBytes } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { CallToolResult, ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -12,7 +16,7 @@ import {
   type ProgressListener,
 } from "../providers/types.js";
 import { NoProviderError, type Router } from "../router.js";
-import { makePreview, type Storage } from "../storage.js";
+import { makePreview, slugify, type SavedImage, type Storage } from "../storage.js";
 
 export const MAX_PROMPT_LENGTH = 4000;
 export const HEARTBEAT_MS = 5000;
@@ -41,7 +45,9 @@ const inputSchema = {
   quality: z
     .enum(QUALITIES)
     .default("draft")
-    .describe('"draft" (~0.25 megapixels, e.g. 512x512; faster) for iterating; "final" (~1 megapixel, e.g. 1024x1024) once the composition is right.'),
+    .describe(
+      '"draft" for iterating (~0.25 megapixels locally, e.g. 512x512; faster and cheaper; paid providers may render drafts larger at a low-quality setting); "final" (~1 megapixel, e.g. 1024x1024) once the composition is right.',
+    ),
   provider: z
     .enum(PROVIDER_NAMES)
     .optional()
@@ -125,12 +131,19 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
           ignored_params: ignored,
           skipped_providers: skipped,
         };
-        const saved = await deps.storage.save(args.filename ?? args.prompt, result.png, {
-          version: 1,
-          created_at: new Date().toISOString(),
-          request: args,
-          ...facts,
-        });
+        const name = args.filename ?? args.prompt;
+        let saved: SavedImage;
+        try {
+          saved = await deps.storage.save(name, result.png, {
+            version: 1,
+            created_at: new Date().toISOString(),
+            request: args,
+            ...facts,
+          });
+        } catch (err) {
+          // The image may have been paid for: never drop it on the floor.
+          return await rescueResult(err, result.png, name, facts, deps.storage.root);
+        }
         const output: Output = { path: saved.pngPath, sidecar_path: saved.sidecarPath, ...facts };
         const preview = await makePreview(result.png);
 
@@ -195,8 +208,34 @@ function startProgress(
   };
 }
 
+function formatCost(o: { cost_usd: number; cost_is_estimate: boolean }): string {
+  return `$${o.cost_usd.toFixed(o.cost_usd === 0 ? 2 : 4)}${o.cost_is_estimate && o.cost_usd > 0 ? " (estimate)" : ""}`;
+}
+
+/**
+ * Saving failed after the provider succeeded. Keeps the PNG in the system temp
+ * folder and says where, so a paid image is never lost to a disk problem.
+ */
+async function rescueResult(
+  err: unknown,
+  png: Buffer,
+  name: string,
+  facts: { provider: string; cost_usd: number; cost_is_estimate: boolean },
+  outputDir: string,
+): Promise<CallToolResult> {
+  const reason = err instanceof Error ? err.message : String(err);
+  const path = join(tmpdir(), `darkroom-rescue-${slugify(name)}-${randomBytes(4).toString("hex")}.png`);
+  const kept = await writeFile(path, png, { flag: "wx" }).then(
+    () => `The image was kept at ${path} instead.`,
+    (e: unknown) => `Keeping a copy in the temp folder failed too (${e instanceof Error ? e.message : String(e)}).`,
+  );
+  const text = `Generated an image with ${facts.provider} (${formatCost(facts)}), but couldn't save it to ${outputDir} (${reason}). ${kept}`;
+  log("error", "could not save generated image", { error: reason, rescued: kept });
+  return { isError: true, content: [{ type: "text", text }] };
+}
+
 function summarize(o: Output): string {
-  const cost = `$${o.cost_usd.toFixed(o.cost_usd === 0 ? 2 : 4)}${o.cost_is_estimate && o.cost_usd > 0 ? " (estimate)" : ""}`;
+  const cost = formatCost(o);
   const lines = [
     `Saved ${o.path}`,
     `${o.provider} (${o.model}), ${o.width}×${o.height}, seed ${o.seed ?? "n/a"}, ${(o.latency_ms / 1000).toFixed(1)}s, ${cost}. The image above is a preview.`,

@@ -21,8 +21,8 @@ describe("loadConfig", () => {
       dailyCapUsd: 2,
       allowPaidFallback: false,
       comfyui: { url: "http://127.0.0.1:8188", workflow: "zimage", timeoutMs: 300_000 },
-      openaiApiKey: undefined,
-      geminiApiKey: undefined,
+      openai: { apiKey: undefined, model: "gpt-image-2.5-flare", timeoutMs: 180_000 },
+      gemini: { apiKey: undefined },
     });
   });
 
@@ -35,8 +35,8 @@ describe("loadConfig", () => {
 
   it("ignores unrelated variables, including a generic OPENAI_API_KEY", () => {
     const config = loadConfig({ OPENAI_API_KEY: "sk-generic", GEMINI_API_KEY: "g-generic" });
-    expect(config.openaiApiKey).toBeUndefined();
-    expect(config.geminiApiKey).toBeUndefined();
+    expect(config.openai.apiKey).toBeUndefined();
+    expect(config.gemini.apiKey).toBeUndefined();
   });
 
   describe("DARKROOM_OUTPUT_DIR", () => {
@@ -105,6 +105,8 @@ describe("loadConfig", () => {
       ["COMFYUI_URL", "ftp://example.com", "must be an http(s) URL"],
       ["COMFYUI_URL", "not a url", "must be an http(s) URL"],
       ["COMFYUI_WORKFLOW", "../zimage", "must be a template name like 'zimage'"],
+      ["DARKROOM_OPENAI_MODEL", "gpt image", "must be a model name like 'gpt-image-2.5-flare'"],
+      ["DARKROOM_OPENAI_TIMEOUT_MS", "10", "must be at least 1000"],
     ])("rejects %s=%s", (name, value, message) => {
       expect(problemsFor({ [name]: value })).toContain(`${name}: ${message}`);
     });
@@ -116,8 +118,14 @@ describe("loadConfig", () => {
 
   it("reads the Darkroom-specific API keys", () => {
     const config = loadConfig({ DARKROOM_OPENAI_API_KEY: "sk-test", DARKROOM_GEMINI_API_KEY: "g-test" });
-    expect(config.openaiApiKey).toBe("sk-test");
-    expect(config.geminiApiKey).toBe("g-test");
+    expect(config.openai.apiKey).toBe("sk-test");
+    expect(config.gemini.apiKey).toBe("g-test");
+  });
+
+  it("reads the OpenAI model and timeout", () => {
+    expect(
+      loadConfig({ DARKROOM_OPENAI_MODEL: "gpt-image-2", DARKROOM_OPENAI_TIMEOUT_MS: "60000" }).openai,
+    ).toMatchObject({ model: "gpt-image-2", timeoutMs: 60_000 });
   });
 
   it("reports every problem at once, without echoing the bad values", () => {

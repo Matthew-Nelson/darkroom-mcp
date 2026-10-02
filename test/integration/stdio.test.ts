@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -126,6 +126,25 @@ describe("darkroom over stdio", () => {
     expect(text.text).toContain("Ignored by this provider: negative_prompt.");
   });
 
+  it("keeps a generated image in the temp folder when the output directory can't be written", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
+    await rm(outputDir, { recursive: true });
+    await writeFile(outputDir, "a file where the output directory should be");
+
+    const result = await call(c, { prompt: "rescue me" });
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    const text = block?.type === "text" ? block.text : "";
+    const rescued = /The image was kept at (\S+\.png) instead\./.exec(text)?.[1];
+    expect(text).toMatch(/^Generated an image with mock \(\$0\.00\), but couldn't save it to /);
+    expect(rescued).toBeDefined();
+    try {
+      expect((await sharp(rescued).metadata()).format).toBe("png");
+    } finally {
+      if (rescued) await rm(rescued, { force: true });
+    }
+  });
+
   it("applies defaults: 1:1 draft", async () => {
     const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
     const out = (await call(c, { prompt: "hello" })).structuredContent as Record<string, unknown>;
@@ -160,6 +179,66 @@ describe("darkroom over stdio", () => {
       type: "text",
       text: `No image provider could take this request (comfyui: unhealthy: Can't reach ComfyUI at http://127.0.0.1:${port} (ECONNREFUSED). Is it running? Set COMFYUI_URL if it isn't at that address.).`,
     });
+  });
+
+  // None of the paid tests below reach the network: each is refused before the API call.
+  const FAKE_KEY = "sk-proj-FAKEKEYFORSTDIOTESTS0123456789";
+
+  it("ignores a generic OPENAI_API_KEY: openai stays unhealthy", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "openai", OPENAI_API_KEY: FAKE_KEY });
+    const result = await call(c, { prompt: "hello" });
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    expect(block?.type === "text" && block.text).toMatch(
+      /^No image provider could take this request \(openai: unhealthy: DARKROOM_OPENAI_API_KEY is not set\./,
+    );
+  });
+
+  it("refuses a paid request over the daily cap, while the same request runs on mock", async () => {
+    const c = await connect({
+      DARKROOM_PROVIDER_ORDER: "mock,openai",
+      DARKROOM_OPENAI_API_KEY: FAKE_KEY,
+      DARKROOM_DAILY_CAP_USD: "0.001", // below any OpenAI estimate, so the request never leaves
+    });
+    const args = { prompt: "a mug that says DARKROOM", aspect_ratio: "3:2" };
+    expect((await call(c, { ...args, provider: "mock" })).isError).toBeFalsy();
+
+    const result = await call(c, { ...args, provider: "openai" });
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    const text = block?.type === "text" ? block.text : "";
+    expect(text).toMatch(/^No image provider could take this request \(openai: daily spend cap reached: \$0\.00 of \$0\.001 already/);
+    expect(text).not.toContain(FAKE_KEY);
+  });
+
+  it("doesn't fall from a stopped ComfyUI to a paid provider without the flag", async () => {
+    const port = await closedPort();
+    const c = await connect({
+      COMFYUI_URL: `http://127.0.0.1:${port}`,
+      DARKROOM_PROVIDER_ORDER: "comfyui,openai",
+      DARKROOM_OPENAI_API_KEY: FAKE_KEY,
+    });
+    const result = await call(c, { prompt: "hello" });
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    expect(block?.type === "text" && block.text).toContain(
+      "openai: not used because comfyui was skipped and this provider costs money; DARKROOM_ALLOW_PAID_FALLBACK=true allows this",
+    );
+  });
+
+  it("fails at startup when DARKROOM_OPENAI_MODEL has no known prices", () => {
+    const run = spawnSync(process.execPath, [SERVER], {
+      env: {
+        ...getDefaultEnvironment(),
+        DARKROOM_OUTPUT_DIR: outputDir,
+        DARKROOM_PROVIDER_ORDER: "openai",
+        DARKROOM_OPENAI_MODEL: "dall-e-3",
+      },
+      input: "",
+      encoding: "utf8",
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(`DARKROOM_OPENAI_MODEL: "dall-e-3" isn't a model Darkroom has prices for`);
   });
 
   it("fails at startup when COMFYUI_WORKFLOW names a missing template", () => {

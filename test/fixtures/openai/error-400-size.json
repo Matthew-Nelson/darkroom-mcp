@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Invalid size \"512x512\". The total pixel count must be at least 655360.",
+    "type": "invalid_request_error",
+    "param": "size",
+    "code": "invalid_value"
+  }
+}

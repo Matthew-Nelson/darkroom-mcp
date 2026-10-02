@@ -62,19 +62,19 @@ v1 exposes exactly three tools; anything more waits for Phase 2.
 
 Every saved image gets a JSON sidecar next to it (`image.png` + `image.json`) holding the full request, the resolved provider and model, actual size, seed, latency, cost, and timestamp. Filenames never overwrite: a short unique id is always appended to the sanitized slug.
 
-`quality` controls the size tier, as a pixel budget rather than a short edge. `draft` renders about 0.25 megapixels (512×512, or 688×384 at 16:9; about 1.5 minutes locally on a 16GB M3); `final` renders about 1 megapixel (1024×1024, or 1360×768 at 16:9; about 3.5 minutes locally). Diffusion models are trained near 1MP, and time and memory scale with pixel count, so a wide `final` costs about what a square one does. Claude should iterate on drafts and render `final` once the composition is right, re-using the draft's seed where the provider supports it. Paid providers may map both tiers to their cheapest size or to a quality setting; each provider documents its mapping.
+`quality` controls the size tier, as a pixel budget rather than a short edge. `draft` renders about 0.25 megapixels (512×512, or 688×384 at 16:9; about 1.5 minutes locally on a 16GB M3); `final` renders about 1 megapixel (1024×1024, or 1360×768 at 16:9; about 3.5 minutes locally). Diffusion models are trained near 1MP, and time and memory scale with pixel count, so a wide `final` costs about what a square one does. Claude should iterate on drafts and render `final` once the composition is right, re-using the draft's seed where the provider supports it. Paid providers may map both tiers to their cheapest size or to a quality setting; each provider documents its mapping. (`openai`, decided in M2: its minimum image is 655,360 pixels, so `draft` renders at the smallest allowed size, e.g. 816×816, at `low` quality, and `final` at the shared 1MP sizes at `medium` quality; `high` cost about 10× `low` in the benchmark with little visible gain.)
 
 Tool descriptions must be written for the model: say when to use the tool, that local generation is the default, that local generation is slow (minutes, not seconds) so drafts come first, that with the default local model a new seed gives nearly the same picture so variety comes from rewording the prompt, that results come back as viewable images, and that **`provider` should only be passed when the user explicitly asks for a specific provider, because some providers cost money.**
 
 ## Providers
 
-v1 ships three providers, each a single file implementing the `ImageProvider` interface: `mock`, `comfyui`, and one paid provider (pick OpenAI or Gemini at M2). The other paid provider follows immediately after v1. Model names and prices below are starting points; the agent must verify them against current provider docs before coding, and all of them live in config, not code.
+v1 ships three providers, each a single file implementing the `ImageProvider` interface: `mock`, `comfyui`, and one paid provider (OpenAI, chosen at the start of M2). Gemini follows immediately after v1. Model names and prices below were checked on Oct 2, 2026; verify them against current provider docs before changing them. The model is set in config; each paid provider keeps its per-token rates in a small table at the top of its file (one line per model), and refuses to start with a model it has no rates for.
 
 | Provider | Cost | How it works | Notes |
 | --- | --- | --- | --- |
 | `comfyui` (default) | Free | HTTP to a local ComfyUI server: POST a workflow JSON to `/prompt`, poll `/history/{id}`, fetch bytes from `/view` | Ship one Z-Image Turbo template (GGUF, via the ComfyUI-GGUF plugin) in `workflows/`; Flux schnell and SDXL templates follow post-v1. Inject prompt, size, and seed by locating nodes through a small mapping file next to each template, not by hard-coded node ID. The mapping file also lists the template's model filenames, so the health check can verify each one exists. Exact files, sources, and timings are in "Local model spike results" below. Slow on Apple Silicon: default timeout 300s, configurable. |
-| `openai` | Paid, about $0.04 to $0.17 per image depending on quality; token-billed, so record actual usage from the response | OpenAI Images API with a gpt-image model | Best typography and instruction following. Fixed set of supported sizes; no seed. |
-| `gemini` | Paid, about $0.04 to $0.07 per image; token-billed, so record actual usage from the response | Gemini API with a Flash Image model | Cheapest paid option. Google's image API had no free tier as of early 2026; do not assume one. Sizes are set by aspect ratio, not pixels. Send the key in the `x-goog-api-key` header, never as a `?key=` query param, so it can't leak via URLs in errors. |
+| `openai` | Paid, token-billed ($30 per million image output tokens for `gpt-image-2.5-flare`): measured in the M2 benchmark at $0.0053 for a `low` 816×816 draft and $0.0528 for a `high` 1024×1024 image (a `high` 1360×768: $0.0298). `final` uses `medium`, about $0.013 for a square by third-party token counts (not yet measured). Record actual usage from the response | OpenAI Images API (`POST /v1/images/generations`) with a gpt-image model; default `gpt-image-2.5-flare` | Best typography and instruction following, and the cheaper paid option as of Oct 2026. Any size in multiples of 16, ratio 1:3 to 3:1, at least 655,360 pixels; no seed. |
+| `gemini` | Paid, $0.045 (0.5K) to $0.067 (1K) per image for Gemini 3.1 Flash Image ($0.034 at 1K for Flash Lite Image); token-billed, so record actual usage from the response | Gemini API with a Flash Image model | Google's image API had no free tier as of early 2026; do not assume one. Sizes are set by aspect ratio, not pixels. Send the key in the `x-goog-api-key` header, never as a `?key=` query param, so it can't leak via URLs in errors. |
 | `mock` | Free | Generates a placeholder PNG (prompt text and seed drawn on a colored background, color derived from the seed) with no network | Used in tests and CI, and for demoing without a GPU or keys. Text rendering depends on system fonts, so tests assert on dimensions and format, never on image bytes or hashes. |
 
 The interface:
@@ -140,6 +140,8 @@ All configuration comes from environment variables, validated with zod at startu
 | `COMFYUI_WORKFLOW` | No | `zimage` | Which template in `workflows/` to use |
 | `COMFYUI_TIMEOUT_MS` | No | `300000` | Per-request timeout including queue wait |
 | `DARKROOM_OPENAI_API_KEY`, `DARKROOM_GEMINI_API_KEY` | No | none | Darkroom-specific keys; a paid provider needs its key **and** a place in the order |
+| `DARKROOM_OPENAI_MODEL` | No | `gpt-image-2.5-flare` | OpenAI image model; must be one the provider has rates for |
+| `DARKROOM_OPENAI_TIMEOUT_MS` | No | `180000` | Per-request OpenAI timeout |
 
 Security requirements:
 
@@ -247,7 +249,7 @@ Build milestone by milestone and stop for review after each; do not start Phase 
 - Before writing provider code, check current docs for the MCP TypeScript SDK, the OpenAI Images API, the Gemini image API, and the ComfyUI HTTP API. Model names, parameters, supported sizes, seed support, and prices change; update this spec's config defaults if they have.
 - Stack: Node 22+ (Node 20 reached end-of-life in April 2026), TypeScript strict, `@modelcontextprotocol/sdk`, zod, vitest, sharp (for previews and the mock PNG). Ask before adding any other runtime dependency.
 - Keep providers isolated: no provider-specific logic in the router or tools.
-- Small commits with clear messages, one milestone per PR or tagged commit, so the history tells the story in an interview.
+- Small commits with clear messages on feature branches, merged through reviewed PRs (one PR per reviewable slice) and tagged per milestone, so the history tells the story in an interview.
 - When a spec decision turns out wrong, propose the change in a short note rather than silently diverging.
 - Write the README as you go, not at the end.
 

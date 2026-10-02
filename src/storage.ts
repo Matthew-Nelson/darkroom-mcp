@@ -60,10 +60,7 @@ export class Storage {
    * files are created exclusively, which also refuses to follow a planted symlink.
    */
   async save(name: string, png: Buffer, metadata: Record<string, unknown>): Promise<SavedImage> {
-    // If the output dir was swapped for a symlink since startup, its real path moves.
-    if ((await realpath(this.root)) !== this.root) {
-      throw new StorageError(`Output directory ${this.root} now resolves elsewhere; refusing to write.`);
-    }
+    await this.checkRoot();
     const slug = slugify(name);
     for (let attempt = 0; attempt < 3; attempt++) {
       const stem = `${slug}-${randomBytes(4).toString("hex")}`;
@@ -87,6 +84,22 @@ export class Storage {
       return { pngPath, sidecarPath };
     }
     throw new StorageError("Could not find a free filename after 3 attempts.");
+  }
+
+  private async checkRoot(): Promise<void> {
+    let real: string;
+    try {
+      real = await realpath(this.root);
+    } catch (err) {
+      if (!isErrno(err, "ENOENT")) throw err;
+      // Deleted while the server runs: recreate it rather than lose a (possibly paid) image.
+      await mkdir(this.root, { recursive: true });
+      real = await realpath(this.root);
+    }
+    // If the output dir was swapped for a symlink since startup, its real path moves.
+    if (real !== this.root) {
+      throw new StorageError(`Output directory ${this.root} now resolves elsewhere; refusing to write.`);
+    }
   }
 }
 

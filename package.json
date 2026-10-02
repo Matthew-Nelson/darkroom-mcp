@@ -26,6 +26,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:comfyui": "vitest run --config vitest.comfyui.config.ts",
+    "test:contract": "vitest run test/contract",
     "check": "npm run typecheck && npm run lint && npm test",
     "start": "node dist/index.js",
     "prepublishOnly": "npm run check && npm run build"
