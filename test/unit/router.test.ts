@@ -282,6 +282,12 @@ describe("Router paid gate", () => {
     expect(openai.generate).not.toHaveBeenCalled();
   });
 
+  it("doesn't count a skipped paid provider that isn't built yet as a free one", async () => {
+    const routed = await router("gemini,openai", { openai: paidProvider() }).generate(req, { signal });
+    expect(routed.provider.name).toBe("openai");
+    expect(routed.skipped).toEqual([{ provider: "gemini", reason: "not available in this version of Darkroom yet" }]);
+  });
+
   it("uses a paid provider listed first, since no free provider was skipped", async () => {
     const routed = await router("openai,comfyui", { openai: paidProvider(), comfyui: fakeProvider("comfyui") }).generate(
       req,

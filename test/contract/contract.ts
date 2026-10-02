@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { PROVIDER_NAMES } from "../../src/config.js";
+import { PAID_PROVIDERS, PROVIDER_NAMES, type ProviderName } from "../../src/config.js";
 import { ASPECT_RATIOS, QUALITIES, type GenerateRequest, type ImageProvider } from "../../src/providers/types.js";
 
 // The shared contract every provider must pass. `cases` are the generate calls to
@@ -18,7 +18,7 @@ export function providerContract(label: string, make: () => ImageProvider | Prom
     it("declares a known name, whether it costs money, and what it supports", async () => {
       const p = await make();
       expect(PROVIDER_NAMES).toContain(p.name);
-      expect(typeof p.isPaid).toBe("boolean");
+      expect(p.isPaid).toBe(PAID_PROVIDERS.has(p.name as ProviderName));
       expect(Object.keys(p.supports).sort()).toEqual(["negativePrompt", "seed"]);
       expect(typeof p.supports.negativePrompt).toBe("boolean");
       expect(typeof p.supports.seed).toBe("boolean");

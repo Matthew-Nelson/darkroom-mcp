@@ -7,6 +7,11 @@ import { z } from "zod";
 export const PROVIDER_NAMES = ["mock", "comfyui", "openai", "gemini"] as const;
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 
+// Which providers cost money, known even before a provider ships so the router's
+// paid gate can tell a skipped free provider from a skipped paid one. The
+// contract suite checks each built provider's `isPaid` against this list.
+export const PAID_PROVIDERS: ReadonlySet<ProviderName> = new Set(["openai", "gemini"]);
+
 export interface Config {
   outputDir: string;
   providerOrder: ProviderName[];

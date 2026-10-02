@@ -1,4 +1,4 @@
-import type { Config, ProviderName } from "./config.js";
+import { PAID_PROVIDERS, type Config, type ProviderName } from "./config.js";
 import type { Ledger, Reservation } from "./ledger.js";
 import { log } from "./log.js";
 import {
@@ -62,7 +62,7 @@ export class Router {
       const provider = this.providers.get(name);
       if (!provider) {
         skipped.push({ provider: name, reason: "not available in this version of Darkroom yet" });
-        freeSkipped ??= name; // can't tell if it's free, so assume it is
+        if (!PAID_PROVIDERS.has(name)) freeSkipped ??= name;
         continue;
       }
       if (provider.isPaid && freeSkipped && !this.config.allowPaidFallback) {
