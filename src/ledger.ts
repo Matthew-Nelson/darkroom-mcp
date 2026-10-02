@@ -56,8 +56,8 @@ export class CapExceededError extends Error {
     public readonly neededUsd: number,
   ) {
     super(
-      `daily spend cap reached: $${spentUsd.toFixed(2)} of $${capUsd.toFixed(2)} already spent or reserved today (UTC), ` +
-        `and this request needs about $${neededUsd.toFixed(4)}. Raise DARKROOM_DAILY_CAP_USD, or wait for the UTC day to roll over`,
+      `daily spend cap reached: ${formatUsd(spentUsd)} of ${formatUsd(capUsd)} already spent or reserved today (UTC), ` +
+        `and this request needs about ${formatUsd(neededUsd)}. Raise DARKROOM_DAILY_CAP_USD, or wait for the UTC day to roll over`,
     );
     this.name = "CapExceededError";
   }
@@ -219,6 +219,11 @@ export class Ledger {
       throw new LedgerError(`Can't write the spend ledger at ${this.path} (${err instanceof Error ? err.message : String(err)}).`);
     }
   }
+}
+
+/** "$2.00", "$0.001", "$0.0915": at least cents, up to four decimals, so sub-cent amounts don't round away. */
+function formatUsd(usd: number): string {
+  return `$${usd.toFixed(4).replace(/(\.\d{2}\d*?)0+$/, "$1")}`;
 }
 
 function dayTotal(file: LedgerFile, day: string): number {

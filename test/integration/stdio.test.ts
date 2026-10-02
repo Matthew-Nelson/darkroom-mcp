@@ -207,7 +207,7 @@ describe("darkroom over stdio", () => {
     expect(result.isError).toBe(true);
     const [block] = result.content;
     const text = block?.type === "text" ? block.text : "";
-    expect(text).toMatch(/^No image provider could take this request \(openai: daily spend cap reached: \$0\.00 of \$0\.00/);
+    expect(text).toMatch(/^No image provider could take this request \(openai: daily spend cap reached: \$0\.00 of \$0\.001 already/);
     expect(text).not.toContain(FAKE_KEY);
   });
 

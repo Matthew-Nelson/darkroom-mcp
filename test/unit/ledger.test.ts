@@ -60,10 +60,18 @@ describe("Ledger", () => {
     const err = await ledger.reserve({ provider: "openai", estimateUsd: 0.06, capUsd: 0.1 }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(CapExceededError);
     expect((err as Error).message).toBe(
-      "daily spend cap reached: $0.06 of $0.10 already spent or reserved today (UTC), and this request needs about $0.0600. " +
+      "daily spend cap reached: $0.06 of $0.10 already spent or reserved today (UTC), and this request needs about $0.06. " +
         "Raise DARKROOM_DAILY_CAP_USD, or wait for the UTC day to roll over",
     );
     expect(await ledger.spentTodayUsd()).toBe(0.06);
+  });
+
+  it.each([
+    [0, 0.001, 0.0066, "$0.00 of $0.001 already spent or reserved today (UTC), and this request needs about $0.0066"],
+    [1.995, 2, 0.0066, "$1.995 of $2.00 already spent or reserved today (UTC), and this request needs about $0.0066"],
+    [0.091515, 0.01, 0.0195, "$0.0915 of $0.01 already spent or reserved today (UTC), and this request needs about $0.0195"],
+  ])("shows amounts precisely in the cap message (spent %s, cap %s)", (spent, cap, needed, text) => {
+    expect(new CapExceededError(spent, cap, needed).message).toContain(text);
   });
 
   it("allows spending exactly up to the cap, without float drift", async () => {
