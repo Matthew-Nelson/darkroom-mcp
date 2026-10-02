@@ -217,6 +217,26 @@ describe("openai provider", () => {
     expect((err as ProviderError).notCharged).toBe(false);
   });
 
+  it("reports a timeout while reading the response body as a timeout", async () => {
+    // Headers arrive, then the body stalls until the request's signal aborts it, as with real fetch.
+    const stalls: typeof fetch = (_input, init) =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              init?.signal?.addEventListener("abort", () => {
+                controller.error(init.signal?.reason);
+              });
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    const err = await failure(provider(stalls, { timeoutMs: 20 }).generate(request, signal));
+    expect(err.message).toMatch(/^OpenAI didn't finish within 0s \(DARKROOM_OPENAI_TIMEOUT_MS\)/);
+    expect((err as ProviderError).notCharged).toBe(false);
+  });
+
   it("aborts the HTTP request when the caller cancels", async () => {
     const controller = new AbortController();
     let seen: AbortSignal | undefined;

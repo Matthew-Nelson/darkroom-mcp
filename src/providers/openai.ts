@@ -109,7 +109,10 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
       onProgress?.({ message: `Waiting for OpenAI (${model}, ${quality} quality, ${width}×${height})` });
 
       const timeout = AbortSignal.timeout(timeoutMs);
-      let res: Response;
+      // The body is read under the same signal, so a cancel or timeout mid-download
+      // lands in the same handler as one during the request.
+      let res: Response | undefined;
+      let text: string;
       try {
         res = await fetchFn(ENDPOINT, {
           method: "POST",
@@ -124,6 +127,7 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
             output_format: "png",
           }),
         });
+        text = await res.text();
       } catch (err) {
         if (signal.aborted) throw err;
         if (timeout.aborted) {
@@ -131,10 +135,10 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
             `OpenAI didn't finish within ${Math.round(timeoutMs / 1000)}s (DARKROOM_OPENAI_TIMEOUT_MS). It may still have billed the request.`,
           );
         }
+        // An error status whose body couldn't be read is still that error status.
+        if (res && !res.ok) throw describeHttpError(res.status, "", redact);
         throw networkError(err, redact);
       }
-
-      const text = await res.text().catch(() => "");
       if (!res.ok) throw describeHttpError(res.status, text, redact);
 
       let body: ImagesResponse;
