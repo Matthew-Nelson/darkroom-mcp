@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M2 — Ledger + first paid provider · status: awaiting review
+## Current: M2 — Ledger + first paid provider · status: done once tagged `m2` (PR #5 approved)
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -32,16 +32,17 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## M2 gates
 
-- [x] `npm run check` passes (243 tests); real contract suite passes against OpenAI (`DARKROOM_CONTRACT_OPENAI=1`, 5 tests)
+- [x] `npm run check` passes (248 tests); real contract suite passes against OpenAI (`DARKROOM_CONTRACT_OPENAI=1`, 5 tests)
 - [x] Done when: the same prompt and aspect ratio run on mock, comfyui, and openai by changing only `provider`
 - [x] Done when: a paid request over the cap is refused
-- [ ] Matt approved and merged PR #5
-- [ ] Tagged `m2`
+- [x] Matt approved PR #5 (after two multi-model reviews; all findings worth fixing were fixed)
+- [ ] Merged and tagged `m2`
 
 ## Next up
 
-- Matt reviews and merges PR #5 (one PR for all of M2, by request; reviewed once by a multi-model review, all 9 findings fixed). `final` on OpenAI now uses `medium` (Matt's call after the benchmark); its cost is unmeasured, so check the first real `medium` image against the ~$0.021 estimate.
-- After merge: tag `m2`, push the tag, stop for `/clear`. Then M3 (fallback, health caching, `list_providers`, `list_images`).
+- Merge PR #5, tag `m2` on `main`, push the tag, then stop for `/clear`.
+- `final` on OpenAI uses `medium` (Matt's call after the benchmark); its cost is unmeasured, so check the first real `medium` image's `cost_usd` against the ~$0.021 estimate.
+- Then M3: fallback on failure, health caching, `list_providers`, `list_images`.
 
 ## Deviations from spec
 
@@ -68,6 +69,17 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - License: `package.json` says `UNLICENSED` for now. Pick one before publishing in M4.
 
 ## Log
+
+### Oct 2, 2026 — second review of PR #5
+
+A second multi-model review of `e54dcec` posted 6 Low findings inline on PR #5 (nothing Medium or High). Fixed, with failing tests first where code changed:
+
+- **G1:** two sessions writing the shared ledger in the same instant could erase one's fresh reservation, so that call's spend never counted. Settling now restores an erased reservation; the docs describe the race accurately. No cross-process lock (a collision now costs at most one call's amount for a few ms).
+- **A5:** the cap-refusal message rounded to cents ("$0.00 of $0.00" for a $0.001 cap); it now shows up to four decimals.
+- **A6, A3:** stale wording ("estimated at most"; `high` called the final tier).
+- **B1** (deleting the ledger resets the day's spend): documented, not changed. **A2** (deleting the output folder mid-run blocks paid calls until restart): left as is, since it fails closed.
+
+Each comment has an inline reply. `npm run check`: 248 tests.
 
 ### Oct 2, 2026 — M2 built, reviewed, benchmarked; awaiting review
 
