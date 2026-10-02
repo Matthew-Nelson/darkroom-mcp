@@ -162,6 +162,66 @@ describe("darkroom over stdio", () => {
     });
   });
 
+  // None of the paid tests below reach the network: each is refused before the API call.
+  const FAKE_KEY = "sk-proj-FAKEKEYFORSTDIOTESTS0123456789";
+
+  it("ignores a generic OPENAI_API_KEY: openai stays unhealthy", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "openai", OPENAI_API_KEY: FAKE_KEY });
+    const result = await call(c, { prompt: "hello" });
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    expect(block?.type === "text" && block.text).toMatch(
+      /^No image provider could take this request \(openai: unhealthy: DARKROOM_OPENAI_API_KEY is not set\./,
+    );
+  });
+
+  it("refuses a paid request over the daily cap, while the same request runs on mock", async () => {
+    const c = await connect({
+      DARKROOM_PROVIDER_ORDER: "mock,openai",
+      DARKROOM_OPENAI_API_KEY: FAKE_KEY,
+      DARKROOM_DAILY_CAP_USD: "0.01",
+    });
+    const args = { prompt: "a mug that says DARKROOM", aspect_ratio: "3:2" };
+    expect((await call(c, { ...args, provider: "mock" })).isError).toBeFalsy();
+
+    const result = await call(c, { ...args, provider: "openai" });
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    const text = block?.type === "text" ? block.text : "";
+    expect(text).toMatch(/^No image provider could take this request \(openai: daily spend cap reached: \$0\.00 of \$0\.01/);
+    expect(text).not.toContain(FAKE_KEY);
+  });
+
+  it("doesn't fall from a stopped ComfyUI to a paid provider without the flag", async () => {
+    const port = await closedPort();
+    const c = await connect({
+      COMFYUI_URL: `http://127.0.0.1:${port}`,
+      DARKROOM_PROVIDER_ORDER: "comfyui,openai",
+      DARKROOM_OPENAI_API_KEY: FAKE_KEY,
+    });
+    const result = await call(c, { prompt: "hello" });
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    expect(block?.type === "text" && block.text).toContain(
+      "openai: not used because comfyui was skipped and this provider costs money; DARKROOM_ALLOW_PAID_FALLBACK=true allows this",
+    );
+  });
+
+  it("fails at startup when DARKROOM_OPENAI_MODEL has no known prices", () => {
+    const run = spawnSync(process.execPath, [SERVER], {
+      env: {
+        ...getDefaultEnvironment(),
+        DARKROOM_OUTPUT_DIR: outputDir,
+        DARKROOM_PROVIDER_ORDER: "openai",
+        DARKROOM_OPENAI_MODEL: "dall-e-3",
+      },
+      input: "",
+      encoding: "utf8",
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(`DARKROOM_OPENAI_MODEL: "dall-e-3" isn't a model Darkroom has prices for`);
+  });
+
   it("fails at startup when COMFYUI_WORKFLOW names a missing template", () => {
     const run = spawnSync(process.execPath, [SERVER], {
       env: { ...getDefaultEnvironment(), DARKROOM_OUTPUT_DIR: outputDir, COMFYUI_WORKFLOW: "nope" },

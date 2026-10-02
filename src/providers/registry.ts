@@ -2,6 +2,7 @@ import type { Config, ProviderName } from "../config.js";
 import { createComfyUIProvider } from "./comfyui.js";
 import { loadWorkflow } from "./comfyui-workflow.js";
 import { createMockProvider } from "./mock.js";
+import { createOpenAIProvider } from "./openai.js";
 import type { ImageProvider } from "./types.js";
 
 type ProviderFactory = (config: Config) => ImageProvider | Promise<ImageProvider>;
@@ -11,6 +12,7 @@ const FACTORIES: Partial<Record<ProviderName, ProviderFactory>> = {
   mock: () => createMockProvider(),
   comfyui: async ({ comfyui }) =>
     createComfyUIProvider({ url: comfyui.url, timeoutMs: comfyui.timeoutMs, workflow: await loadWorkflow(comfyui.workflow) }),
+  openai: ({ openai }) => createOpenAIProvider(openai),
 };
 
 /**

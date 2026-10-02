@@ -13,8 +13,8 @@ export interface Config {
   dailyCapUsd: number;
   allowPaidFallback: boolean;
   comfyui: { url: string; workflow: string; timeoutMs: number };
-  openaiApiKey: string | undefined;
-  geminiApiKey: string | undefined;
+  openai: { apiKey: string | undefined; model: string; timeoutMs: number };
+  gemini: { apiKey: string | undefined };
 }
 
 export class ConfigError extends Error {
@@ -62,6 +62,9 @@ const timeoutMs = z.coerce
   .min(1000, "must be at least 1000")
   .max(2_147_483_647, "must be at most 2147483647 (about 24.8 days)");
 
+// The provider checks the name against its price table at startup.
+const openaiModel = z.string().regex(/^[a-z0-9][a-z0-9._-]*$/, "must be a model name like 'gpt-image-2.5-flare'");
+
 // API keys: only presence is checked, and their values never appear in errors.
 const apiKey = z.string();
 
@@ -74,6 +77,8 @@ const EnvSchema = z.object({
   COMFYUI_WORKFLOW: optional(workflowName),
   COMFYUI_TIMEOUT_MS: optional(timeoutMs),
   DARKROOM_OPENAI_API_KEY: optional(apiKey),
+  DARKROOM_OPENAI_MODEL: optional(openaiModel),
+  DARKROOM_OPENAI_TIMEOUT_MS: optional(timeoutMs),
   DARKROOM_GEMINI_API_KEY: optional(apiKey),
 });
 
@@ -95,7 +100,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       workflow: e.COMFYUI_WORKFLOW ?? "zimage",
       timeoutMs: e.COMFYUI_TIMEOUT_MS ?? 300_000,
     },
-    openaiApiKey: e.DARKROOM_OPENAI_API_KEY,
-    geminiApiKey: e.DARKROOM_GEMINI_API_KEY,
+    openai: {
+      apiKey: e.DARKROOM_OPENAI_API_KEY,
+      model: e.DARKROOM_OPENAI_MODEL ?? "gpt-image-2.5-flare",
+      timeoutMs: e.DARKROOM_OPENAI_TIMEOUT_MS ?? 180_000,
+    },
+    gemini: { apiKey: e.DARKROOM_GEMINI_API_KEY },
   };
 }
