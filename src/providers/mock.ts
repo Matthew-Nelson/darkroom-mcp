@@ -24,7 +24,7 @@ export function createMockProvider(): ImageProvider {
       const svg = placeholderSvg({ width, height, seed, prompt: req.prompt });
       const png = await sharp(Buffer.from(svg)).png().toBuffer();
       signal.throwIfAborted();
-      return { png, model: MODEL, width, height, seed };
+      return { png, model: MODEL, width, height, seed, actualCostUsd: 0 };
     },
   };
 }

@@ -189,7 +189,14 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
         throwIfFailed(entry);
         const raw = await fetchImage(entry, run);
         const png = await sharp(raw).png().toBuffer({ resolveWithObject: true });
-        return { png: png.data, model: mapping.model, width: png.info.width, height: png.info.height, seed };
+        return {
+          png: png.data,
+          model: mapping.model,
+          width: png.info.width,
+          height: png.info.height,
+          seed,
+          actualCostUsd: 0, // local and free: the cost is known, not estimated
+        };
       } catch (err) {
         if (timeout.aborted && !signal.aborted) {
           throw new ComfyUIError(

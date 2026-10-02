@@ -155,7 +155,7 @@ describe("comfyui provider: generate", () => {
     expect(view?.path).toBe("/view?filename=ComfyUI_temp_ltpqi_00001_.png&subfolder=&type=temp");
 
     // The size comes from the returned PNG, not from what was requested.
-    expect(result).toMatchObject({ model: "z-image-turbo-q4_k_m", width: 8, height: 8, seed: 42 });
+    expect(result).toMatchObject({ model: "z-image-turbo-q4_k_m", width: 8, height: 8, seed: 42, actualCostUsd: 0 });
     expect((await sharp(result.png).metadata()).format).toBe("png");
     expect(comfy.posted("/interrupt")).toEqual([]);
   });

@@ -18,7 +18,7 @@ export interface GenerateResult {
   width: number; // actual output size
   height: number;
   seed: number | null; // null when the provider has no seed control
-  actualCostUsd?: number; // from provider usage data, when available
+  actualCostUsd?: number; // from provider usage data when available; 0 for free providers
 }
 
 // What a provider is doing right now, e.g. "Sampling step 3/8". The tool turns

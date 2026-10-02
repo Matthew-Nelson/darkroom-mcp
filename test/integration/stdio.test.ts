@@ -99,7 +99,7 @@ describe("darkroom over stdio", () => {
       height: 768,
       seed: 42,
       cost_usd: 0,
-      cost_is_estimate: true,
+      cost_is_estimate: false,
       ignored_params: ["negative_prompt"],
       skipped_providers: [],
     });

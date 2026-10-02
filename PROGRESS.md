@@ -34,7 +34,6 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 - Matt reviews M1. On approval: mark done, tag `m1`, push.
 - Decide the first paid provider (OpenAI vs. Gemini) before M2.
-- Question for Matt: free providers (`mock`, `comfyui`) report `cost_is_estimate: true` with `cost_usd: 0`, because they don't set `actualCostUsd`. Should free providers report an actual $0 (`cost_is_estimate: false`)? The headless acceptance session flagged it too.
 
 ## Deviations from spec
 
@@ -45,7 +44,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - **Cancellation is targeted:** dequeue our job (`POST /queue {delete}`), then `POST /interrupt {prompt_id}` only if `/queue` shows our job running. A bare `/interrupt` would stop another client's job.
 - **`quality` tiers are a pixel budget, not a short edge** (agreed Oct 2, 2026, start of M1). `draft` ≈ 0.25MP, `final` ≈ 1MP, sides rounded to multiples of 16. The short-edge rule made a 16:9 `final` 1824×1024 (1.8× the pixels of a square one), slower and a memory risk on 16GB; diffusion models are trained near 1MP. Mock uses the same sizing. SPEC.md updated.
 - **Node 22+ instead of Node 20+** (decided Oct 2, 2026, after M0). Node 20 reached end-of-life in April 2026. `engines` is `>=22.12.0` (vitest 5's floor), CI tests Node 22 and 24, and vitest is 5.x. TypeScript stays on 6.0 because typescript-eslint doesn't support 7 yet.
-- **Additions to `generate_image` output:** `sidecar_path`, and `cost_is_estimate` (true when the provider didn't report an actual cost), so "actual vs. estimate" isn't ambiguous.
+- **Additions to `generate_image` output:** `sidecar_path`, and `cost_is_estimate` (true when the provider didn't report an actual cost), so "actual vs. estimate" isn't ambiguous. Free providers (`mock`, `comfyui`) report an actual $0, so `cost_is_estimate` is false for them (decided Oct 2, 2026, M1 review).
 - **`DARKROOM_OUTPUT_DIR` expands a leading `~/`.** Values in `~/.claude.json` aren't shell-expanded, and `~/...` is absolute in intent. Other relative paths are still rejected.
 - **M0 router is a stub:** explicit provider, or the first implemented and healthy one in the order; no fallback on failure, no health caching. Provider names not built yet (comfyui until M1) are skipped with "not available in this version of Darkroom yet", so the default order gives a clear error rather than a startup crash. It also refuses every paid provider until the ledger lands in M2.
 

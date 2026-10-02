@@ -59,7 +59,7 @@ describe("mock provider", () => {
     expect([meta.width, meta.height]).toEqual([width, height]);
     expect([result.width, result.height]).toEqual([width, height]);
     expect(result.model).toBe("mock-placeholder-v1");
-    expect(result.actualCostUsd).toBeUndefined();
+    expect(result.actualCostUsd).toBe(0); // free, so the cost is known, not estimated
   });
 
   it("echoes a given seed", async () => {
