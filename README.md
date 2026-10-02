@@ -95,8 +95,8 @@ Square images cost the most; wide ones use fewer tokens despite having as many p
 **Spend cap.** Every paid request first reserves its estimated cost against `DARKROOM_DAILY_CAP_USD` (default $2.00) and is refused, before anything is sent, if that would go over. Afterwards the reservation becomes the actual cost OpenAI reports from token usage. A request that fails in a way OpenAI may still have billed (a timeout, a dropped connection, a server error) keeps its estimate; one rejected up front (a bad key, a blocked prompt) counts nothing.
 
 - The day rolls over at **UTC midnight**, not local midnight.
-- Spend is recorded in `spend-ledger.json` in `DARKROOM_OUTPUT_DIR`, so two setups with different output directories have separate caps. If the ledger is ever corrupt, paid providers are blocked until it's fixed or moved aside.
-- Separate Claude Code sessions share the ledger file, but two sessions starting paid requests in the same instant can both pass the cap check. That small race is accepted.
+- Spend is recorded in `spend-ledger.json` in `DARKROOM_OUTPUT_DIR`, so two setups with different output directories have separate caps. If the ledger is ever corrupt, paid providers are blocked until it's fixed or moved aside. Deleting it resets today's recorded spend to $0.
+- Separate Claude Code sessions share the ledger file, but there's no lock between them. If two sessions start paid requests in the same instant, both can pass the cap check, and one can briefly erase the other's reservation; it's restored when that request finishes, so its spend still counts. That small race is accepted.
 - Results report `cost_usd`, with `cost_is_estimate: true` only when the provider didn't report usage.
 
 **Fallback.** If a free provider earlier in the order is skipped (for example, ComfyUI isn't running), Darkroom does **not** move on to a paid one unless `DARKROOM_ALLOW_PAID_FALLBACK=true`. Asking for `provider: "openai"` explicitly still goes through the cap.

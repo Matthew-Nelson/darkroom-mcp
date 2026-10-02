@@ -28,7 +28,7 @@ if (openaiOn && config) {
   const estimate = ONE_DRAFT.reduce((sum, req) => sum + make().estimateCostUsd(req), 0);
   process.stderr.write(
     `\n[contract] Real OpenAI run: ${ONE_DRAFT.length} draft image(s) with ${config.openai.model}, ` +
-      `estimated at most $${estimate.toFixed(4)}. This bypasses the spend ledger.\n\n`,
+      `estimated at about $${estimate.toFixed(4)}. This bypasses the spend ledger.\n\n`,
   );
   providerContract("openai (real API)", make, { cases: ONE_DRAFT, timeoutMs: config.openai.timeoutMs + 10_000 });
 }
