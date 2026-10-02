@@ -245,7 +245,7 @@ None of these start until v1 is published; pick one at a time.
 Build milestone by milestone and stop for review after each; do not start Phase 2.
 
 - Before writing provider code, check current docs for the MCP TypeScript SDK, the OpenAI Images API, the Gemini image API, and the ComfyUI HTTP API. Model names, parameters, supported sizes, seed support, and prices change; update this spec's config defaults if they have.
-- Stack: Node 20+, TypeScript strict, `@modelcontextprotocol/sdk`, zod, vitest, sharp (for previews and the mock PNG). Ask before adding any other runtime dependency.
+- Stack: Node 22+ (Node 20 reached end-of-life in April 2026), TypeScript strict, `@modelcontextprotocol/sdk`, zod, vitest, sharp (for previews and the mock PNG). Ask before adding any other runtime dependency.
 - Keep providers isolated: no provider-specific logic in the router or tools.
 - Small commits with clear messages, one milestone per PR or tagged commit, so the history tells the story in an interview.
 - When a spec decision turns out wrong, propose the change in a short note rather than silently diverging.

@@ -30,7 +30,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Deviations from spec
 
-- **Tooling versions.** vitest 4.x, not 5.x (5.x needs Node 22, the spec says Node 20+). TypeScript 6.0, not 7.x (typescript-eslint doesn't support 7 yet). Runtime floor is Node 20.9 (sharp's minimum). Fresh `npm install` of vitest 4 trips an npm 10.9 resolver bug ("Cannot read properties of null (reading 'edgesOut')"); installs from the committed lockfile work.
+- **Node 22+ instead of Node 20+** (decided Oct 2, 2026, after M0). Node 20 reached end-of-life in April 2026. `engines` is `>=22.12.0` (vitest 5's floor), CI tests Node 22 and 24, and vitest is 5.x. TypeScript stays on 6.0 because typescript-eslint doesn't support 7 yet.
 - **Additions to `generate_image` output:** `sidecar_path`, and `cost_is_estimate` (true when the provider didn't report an actual cost), so "actual vs. estimate" isn't ambiguous.
 - **`DARKROOM_OUTPUT_DIR` expands a leading `~/`.** Values in `~/.claude.json` aren't shell-expanded, and `~/...` is absolute in intent. Other relative paths are still rejected.
 - **M0 router is a stub:** explicit provider, or the first implemented and healthy one in the order; no fallback on failure, no health caching. Provider names not built yet (comfyui until M1) are skipped with "not available in this version of Darkroom yet", so the default order gives a clear error rather than a startup crash. It also refuses every paid provider until the ledger lands in M2.

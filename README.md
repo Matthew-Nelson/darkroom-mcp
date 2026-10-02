@@ -8,7 +8,7 @@ Providers are swappable: a free local model (Z-Image Turbo via ComfyUI) by defau
 
 ## Quick start (mock provider)
 
-Requires Node 20.9 or newer.
+Requires Node 22.12 or newer.
 
 ```sh
 git clone https://github.com/Matthew-Nelson/darkroom-mcp.git
