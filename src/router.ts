@@ -2,6 +2,7 @@ import { PAID_PROVIDERS, type Config, type ProviderName } from "./config.js";
 import type { Ledger, Reservation } from "./ledger.js";
 import { log } from "./log.js";
 import {
+  ContentRefusedError,
   ProviderError,
   type GenerateRequest,
   type GenerateResult,
@@ -9,9 +10,12 @@ import {
   type ProgressListener,
 } from "./providers/types.js";
 
-// M2 router: picks the explicit provider, or the first available and healthy one
-// in the configured order, and runs every paid call through the spend ledger.
-// Fallback on failure and health caching arrive in M3 (see SPEC.md).
+// Picks the explicit provider, or walks the configured order: skips unavailable and
+// unhealthy providers, falls back to the next one when a call fails, and runs every
+// paid call through the spend ledger. See "Routing, fallback and spend cap" in SPEC.md.
+
+// How long a healthy result is reused before checking again.
+export const HEALTH_CACHE_MS = 60_000;
 
 export interface SkippedProvider {
   provider: ProviderName;
@@ -35,6 +39,10 @@ export class NoProviderError extends Error {
 }
 
 export class Router {
+  // Only healthy results are cached: an unhealthy provider is checked again on
+  // every call, so one that comes back (e.g. ComfyUI started) is used at once.
+  private readonly healthyUntil = new Map<ProviderName, number>();
+
   constructor(
     private readonly config: Config,
     private readonly providers: ReadonlyMap<ProviderName, ImageProvider>,
@@ -54,33 +62,31 @@ export class Router {
     }
     const candidates = opts.provider ? [opts.provider] : this.config.providerOrder;
     const skipped: SkippedProvider[] = [];
-    // The first provider passed over that wasn't known to be paid. Once one is,
-    // the hard rule applies: no paid provider without DARKROOM_ALLOW_PAID_FALLBACK.
-    let freeSkipped: ProviderName | undefined;
+    // The first provider passed over (skipped or failed) that wasn't known to be paid.
+    // Once there is one, the hard rule applies: no paid provider without
+    // DARKROOM_ALLOW_PAID_FALLBACK.
+    let freePassed: { name: ProviderName; how: "was skipped" | "failed" } | undefined;
 
     for (const name of candidates) {
       const provider = this.providers.get(name);
       if (!provider) {
         skipped.push({ provider: name, reason: "not available in this version of Darkroom yet" });
-        if (!PAID_PROVIDERS.has(name)) freeSkipped ??= name;
+        if (!PAID_PROVIDERS.has(name)) freePassed ??= { name, how: "was skipped" };
         continue;
       }
-      if (provider.isPaid && freeSkipped && !this.config.allowPaidFallback) {
+      if (provider.isPaid && freePassed && !this.config.allowPaidFallback) {
         skipped.push({
           provider: name,
           reason:
-            `not used because ${freeSkipped} was skipped and this provider costs money; ` +
+            `not used because ${freePassed.name} ${freePassed.how} and this provider costs money; ` +
             "DARKROOM_ALLOW_PAID_FALLBACK=true allows this",
         });
         continue;
       }
-      const health = await provider.healthCheck().catch((err: unknown) => ({
-        ok: false,
-        detail: err instanceof Error ? err.message : String(err),
-      }));
+      const health = await this.health(name, provider);
       if (!health.ok) {
         skipped.push({ provider: name, reason: `unhealthy: ${health.detail ?? "health check failed"}` });
-        if (!provider.isPaid) freeSkipped ??= name;
+        if (!provider.isPaid) freePassed ??= { name, how: "was skipped" };
         continue;
       }
 
@@ -105,7 +111,14 @@ export class Router {
         result = await provider.generate(req, opts.signal, opts.onProgress);
       } catch (err) {
         if (reservation) await this.closeFailed(reservation, err);
-        throw err;
+        this.healthyUntil.delete(name);
+        // A refused prompt is never shopped to another (possibly paid) provider, a
+        // cancel means stop, and an explicit provider choice has no fallback.
+        if (err instanceof ContentRefusedError || opts.signal.aborted || opts.provider) throw err;
+        log("warn", "provider failed", { provider: name, error: errorMessage(err) });
+        skipped.push({ provider: name, reason: `failed: ${errorMessage(err)}` });
+        if (!provider.isPaid) freePassed ??= { name, how: "failed" };
+        continue;
       }
       if (reservation) {
         if (result.actualCostUsd !== undefined && result.actualCostUsd > reservation.estimateUsd) {
@@ -127,6 +140,14 @@ export class Router {
 
     const reasons = skipped.map((s) => `${s.provider}: ${s.reason}`).join("; ");
     throw new NoProviderError(`No image provider could take this request (${reasons}).`, skipped);
+  }
+
+  /** The provider's health, reusing a healthy result for HEALTH_CACHE_MS. A check that throws counts as unhealthy. */
+  async health(name: ProviderName, provider: ImageProvider): Promise<{ ok: boolean; detail?: string }> {
+    if ((this.healthyUntil.get(name) ?? 0) > Date.now()) return { ok: true };
+    const health = await provider.healthCheck().catch((err: unknown) => ({ ok: false, detail: errorMessage(err) }));
+    if (health.ok) this.healthyUntil.set(name, Date.now() + HEALTH_CACHE_MS);
+    return health;
   }
 
   private async closeFailed(reservation: Reservation, err: unknown): Promise<void> {

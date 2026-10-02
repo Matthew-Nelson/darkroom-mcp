@@ -48,6 +48,8 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Deviations from spec
 
+- **Only healthy results are cached for 60s** (M3). SPEC says "health check cached for 60s". Caching a failure would leave ComfyUI skipped for up to a minute after it's started; checks are cheap, so unhealthy providers are rechecked on every call. A failed `generate` also drops the provider's cached result.
+- **Which failures fall back** (M3): anything except a `ContentRefusedError`, the caller's own cancel, or a failure of an explicitly chosen provider (which is returned as is). Each failure is listed in `skipped_providers` as `failed: <reason>`.
 - **One PR per milestone** (decided Oct 2, 2026, start of M3). Replaces one PR per slice; the slices are now single-idea commits inside the milestone's PR. `CLAUDE.md` and SPEC.md updated.
 
 - **The first paid provider is OpenAI, and it is now the cheaper one** (decided Oct 2, 2026, start of M2). Checked today: `gpt-image-2.5-flare` bills $30/M image output tokens, roughly $0.006 (low) to $0.05 (high) per 1024² image, and accepts any size in multiples of 16. Gemini 3.1 Flash Image is $0.045–$0.067 per image, and its Lite variant is $0.034 at 1K only. The spec called Gemini "cheapest"; SPEC.md's provider table was updated in PR #5 after review.

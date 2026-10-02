@@ -100,7 +100,12 @@ Square images cost the most; wide ones use fewer tokens despite having as many p
 - Separate Claude Code sessions share the ledger file, but there's no lock between them. If two sessions start paid requests in the same instant, both can pass the cap check, and one can briefly erase the other's reservation; it's restored when that request finishes, so its spend still counts. That small race is accepted.
 - Results report `cost_usd`, with `cost_is_estimate: true` only when the provider didn't report usage.
 
-**Fallback.** If a free provider earlier in the order is skipped (for example, ComfyUI isn't running), Darkroom does **not** move on to a paid one unless `DARKROOM_ALLOW_PAID_FALLBACK=true`. Asking for `provider: "openai"` explicitly still goes through the cap.
+**Fallback.** Darkroom tries the providers in `DARKROOM_PROVIDER_ORDER` in turn. It passes over one that isn't healthy (for example, ComfyUI isn't running) and moves on when one fails or times out. The result's `skipped_providers` says what was passed over and why, so a fallback is never silent.
+
+- After a free provider is skipped or fails, Darkroom does **not** move on to a paid one unless `DARKROOM_ALLOW_PAID_FALLBACK=true`. The flag only unlocks paid providers already in the order.
+- A prompt the provider refuses on policy grounds is returned to Claude as is, never retried on another provider. Cancelling a request stops it; nothing else is tried.
+- Asking for a provider explicitly (`provider: "openai"`) uses only that one, with no fallback, and a paid one still goes through the cap.
+- A healthy check is reused for 60 seconds. An unhealthy provider is checked again on every request, so starting ComfyUI takes effect at once.
 
 ## Tools
 
@@ -129,7 +134,7 @@ All configuration comes from environment variables, validated at startup. The se
 | `DARKROOM_OUTPUT_DIR` | `~/.darkroom/images` | Absolute path for images, sidecars, and the spend ledger. Relative paths are rejected because the server's working directory depends on the client. A leading `~/` is expanded. |
 | `DARKROOM_PROVIDER_ORDER` | `comfyui` | Comma-separated priority list: `mock`, `comfyui`, `openai`, `gemini` |
 | `DARKROOM_DAILY_CAP_USD` | `2.00` | Daily paid-spend ceiling, in USD, per UTC day |
-| `DARKROOM_ALLOW_PAID_FALLBACK` | `false` | Lets the router move from a skipped free provider to a paid one already in the order |
+| `DARKROOM_ALLOW_PAID_FALLBACK` | `false` | Lets the router move from a skipped or failed free provider to a paid one already in the order |
 | `COMFYUI_URL` | `http://127.0.0.1:8188` | Local ComfyUI server |
 | `COMFYUI_WORKFLOW` | `zimage` | Workflow template in `workflows/`. A missing template fails startup |
 | `COMFYUI_TIMEOUT_MS` | `300000` | Per-request timeout, including time waiting in ComfyUI's queue. 1000 to 2147483647 (about 24.8 days, Node's timer limit) |

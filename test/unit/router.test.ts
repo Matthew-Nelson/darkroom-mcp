@@ -119,12 +119,111 @@ describe("Router", () => {
     await router("mock", { mock }).generate(req, { signal: controller.signal });
     expect(mock.generate).toHaveBeenCalledWith(req, controller.signal, undefined);
   });
+});
 
-  it("propagates a provider failure without trying the next provider (fallback is M3)", async () => {
+describe("Router fallback", () => {
+  const failing = (name: string, err: Error) => fakeProvider(name, { generate: vi.fn(() => Promise.reject(err)) });
+
+  it("falls back to the next provider when one fails, and says why", async () => {
+    const comfyui = failing("comfyui", new Error("GPU fell over"));
+    const routed = await router("comfyui,mock", { comfyui, mock: fakeProvider("mock") }).generate(req, { signal });
+    expect(routed.provider.name).toBe("mock");
+    expect(routed.skipped).toEqual([{ provider: "comfyui", reason: "failed: GPU fell over" }]);
+  });
+
+  it("lists every failure when nothing in the order succeeds", async () => {
+    const comfyui = failing("comfyui", new Error("timed out"));
+    const mock = failing("mock", new Error("disk full"));
+    const err = await router("comfyui,mock", { comfyui, mock })
+      .generate(req, { signal })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NoProviderError);
+    expect((err as Error).message).toBe(
+      "No image provider could take this request (comfyui: failed: timed out; mock: failed: disk full).",
+    );
+  });
+
+  it("returns a refusal from a free provider without trying the next one", async () => {
     const mock = fakeProvider("mock");
-    const comfyui = fakeProvider("comfyui", { generate: () => Promise.reject(new Error("GPU fell over")) });
-    await expect(router("comfyui,mock", { comfyui, mock }).generate(req, { signal })).rejects.toThrow("GPU fell over");
+    const comfyui = failing("comfyui", new ContentRefusedError("blocked"));
+    await expect(router("comfyui,mock", { comfyui, mock }).generate(req, { signal })).rejects.toThrow(
+      ContentRefusedError,
+    );
     expect(mock.generate).not.toHaveBeenCalled();
+  });
+
+  it("stops when the caller cancels instead of trying the next provider", async () => {
+    const controller = new AbortController();
+    const mock = fakeProvider("mock");
+    const comfyui = fakeProvider("comfyui", {
+      generate: () => {
+        controller.abort();
+        return Promise.reject(new ProviderError("Generation was cancelled"));
+      },
+    });
+    await expect(
+      router("comfyui,mock", { comfyui, mock }).generate(req, { signal: controller.signal }),
+    ).rejects.toThrow("Generation was cancelled");
+    expect(mock.generate).not.toHaveBeenCalled();
+  });
+
+  it("doesn't fall back from an explicit provider that fails", async () => {
+    const mock = fakeProvider("mock");
+    const comfyui = failing("comfyui", new ProviderError("GPU fell over"));
+    await expect(router("comfyui,mock", { comfyui, mock }).generate(req, { provider: "comfyui", signal })).rejects.toThrow(
+      "GPU fell over",
+    );
+    expect(mock.generate).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed paid call's reservation and moves on to the next provider", async () => {
+    const openai = paidProvider({ generate: () => Promise.reject(new Error("socket hang up")) });
+    const routed = await router("openai,mock", { openai, mock: fakeProvider("mock") }).generate(req, { signal });
+    expect(routed.provider.name).toBe("mock");
+    expect(routed.skipped).toEqual([{ provider: "openai", reason: "failed: socket hang up" }]);
+    expect(await ledger.spentTodayUsd()).toBe(0.08);
+  });
+});
+
+describe("Router health cache", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("reuses a healthy result for 60s, then checks again", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const healthCheck = vi.fn(() => Promise.resolve({ ok: true }));
+    const r = router("mock", { mock: fakeProvider("mock", { healthCheck }) });
+    await r.generate(req, { signal });
+    vi.advanceTimersByTime(59_000);
+    await r.generate(req, { signal });
+    expect(healthCheck).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1_000);
+    await r.generate(req, { signal });
+    expect(healthCheck).toHaveBeenCalledTimes(2);
+  });
+
+  it("doesn't cache an unhealthy result, so a provider that comes back is used at once", async () => {
+    const healthCheck = vi
+      .fn<ImageProvider["healthCheck"]>()
+      .mockResolvedValueOnce({ ok: false, detail: "connection refused" })
+      .mockResolvedValue({ ok: true });
+    const r = router("comfyui,mock", { comfyui: fakeProvider("comfyui", { healthCheck }), mock: fakeProvider("mock") });
+    expect((await r.generate(req, { signal })).provider.name).toBe("mock");
+    expect((await r.generate(req, { signal })).provider.name).toBe("comfyui");
+  });
+
+  it("checks again after a provider fails", async () => {
+    const healthCheck = vi.fn(() => Promise.resolve({ ok: true }));
+    const generate = vi
+      .fn<ImageProvider["generate"]>()
+      .mockRejectedValueOnce(new Error("GPU fell over"))
+      .mockResolvedValue({ png: Buffer.from("c"), model: "c", width: 1, height: 1, seed: 1 });
+    const comfyui = fakeProvider("comfyui", { healthCheck, generate });
+    const r = router("comfyui,mock", { comfyui, mock: fakeProvider("mock") });
+    await r.generate(req, { signal });
+    await r.generate(req, { signal });
+    expect(healthCheck).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -274,6 +373,35 @@ describe("Router paid gate", () => {
     const openai = paidProvider();
     await expect(router("comfyui,openai", { openai }).generate(req, { signal })).rejects.toThrow(NoProviderError);
     expect(openai.generate).not.toHaveBeenCalled();
+  });
+
+  it("doesn't step from a failed free provider to a paid one by default", async () => {
+    const openai = paidProvider();
+    const comfyui = fakeProvider("comfyui", { generate: () => Promise.reject(new Error("timed out")) });
+    const err = await router("comfyui,openai", { comfyui, openai })
+      .generate(req, { signal })
+      .catch((e: unknown) => e);
+    expect((err as NoProviderError).skipped).toEqual([
+      { provider: "comfyui", reason: "failed: timed out" },
+      {
+        provider: "openai",
+        reason:
+          "not used because comfyui failed and this provider costs money; DARKROOM_ALLOW_PAID_FALLBACK=true allows this",
+      },
+    ]);
+    expect(openai.generate).not.toHaveBeenCalled();
+    expect(await ledger.spentTodayUsd()).toBe(0);
+  });
+
+  it("steps from a failed free provider to a paid one with DARKROOM_ALLOW_PAID_FALLBACK=true", async () => {
+    const comfyui = fakeProvider("comfyui", { generate: () => Promise.reject(new Error("timed out")) });
+    const routed = await router(
+      "comfyui,openai",
+      { comfyui, openai: paidProvider() },
+      { DARKROOM_ALLOW_PAID_FALLBACK: "true" },
+    ).generate(req, { signal });
+    expect(routed.provider.name).toBe("openai");
+    expect(routed.skipped).toEqual([{ provider: "comfyui", reason: "failed: timed out" }]);
   });
 
   it("does step to the paid provider with DARKROOM_ALLOW_PAID_FALLBACK=true, and says why", async () => {
