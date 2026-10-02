@@ -40,13 +40,13 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Next up
 
-- Matt reviews and merges PR #5 (one PR for all of M2, by request; reviewed once by a multi-model review, all 9 findings fixed). Open question for Matt: should `final` on OpenAI use `medium` instead of `high`? See the M2 log.
+- Matt reviews and merges PR #5 (one PR for all of M2, by request; reviewed once by a multi-model review, all 9 findings fixed). `final` on OpenAI now uses `medium` (Matt's call after the benchmark); its cost is unmeasured, so check the first real `medium` image against the ~$0.021 estimate.
 - After merge: tag `m2`, push the tag, stop for `/clear`. Then M3 (fallback, health caching, `list_providers`, `list_images`).
 
 ## Deviations from spec
 
 - **The first paid provider is OpenAI, and it is now the cheaper one** (decided Oct 2, 2026, start of M2). Checked today: `gpt-image-2.5-flare` bills $30/M image output tokens, roughly $0.006 (low) to $0.05 (high) per 1024² image, and accepts any size in multiples of 16. Gemini 3.1 Flash Image is $0.045–$0.067 per image, and its Lite variant is $0.034 at 1K only. The spec called Gemini "cheapest"; SPEC.md's provider table was updated in PR #5 after review.
-- **OpenAI `draft` isn't 0.25MP** (M2). OpenAI's minimum image is 655,360 pixels, so `draft` renders at the smallest allowed size (816×816 at 1:1) at `low` quality; `final` uses the shared 1MP sizes at `high`. The spec allows per-provider tier mappings; this one is documented in the README, SPEC, and the tool's `quality` description.
+- **OpenAI `draft` isn't 0.25MP** (M2). OpenAI's minimum image is 655,360 pixels, so `draft` renders at the smallest allowed size (816×816 at 1:1) at `low` quality; `final` uses the shared 1MP sizes at `medium` (Matt chose `medium` over `high` after the benchmark: `high` cost ~10× `low` for little visible gain). The spec allows per-provider tier mappings; this one is documented in the README, SPEC, and the tool's `quality` description.
 - **Paid-provider rates live in code, not env vars** (M2). SPEC said prices "live in config". The model is configurable (`DARKROOM_OPENAI_MODEL`), but per-token rates are a one-line-per-model table at the top of `openai.ts`, and an unknown model fails startup. Env vars for rates would let a typo silently under-reserve against the cap. SPEC.md updated.
 - **`config.ts` lists which providers are paid** (`PAID_PROVIDERS`), so the paid gate knows a not-yet-built `gemini` is paid. The contract suite checks every built provider's `isPaid` against it.
 - **The paid gate for skipped free providers lands in M2, not M3.** Once a paid provider can run, the stub router's unhealthy-skip would otherwise reach it. Fallback on failure stays in M3.
@@ -112,7 +112,7 @@ Docs checked: OpenAI pricing page and image generation guide (`developers.openai
 - OpenAI is fast (8–19 s versus 100 s for a local draft) and spelled the test word right every time; Z-Image misspelled it once at draft size.
 - The response includes an undocumented `data[].generation_id`; `revised_prompt` is absent for these models.
 - Claude Code passes its own environment to stdio MCP servers, so keys can stay out of `~/.claude.json`.
-- Open question for Matt: `final` uses OpenAI `high` ($0.053 square). `medium` might look just as good for roughly a quarter of the cost; worth a side-by-side before M4's eval.
+- **Decision (Matt, after viewing the images): `final` uses `medium`, not `high`.** `high` cost ~10× the `low` draft for little visible gain. `medium` wasn't measured; its estimate (700 tokens, ~$0.021) is set above the third-party count of ~439 tokens for a square (which matched our `low` and `high` measurements), and the router warns if a real cost exceeds it. Benchmark images: `~/.darkroom/benchmark-m2/`.
 
 ### Oct 2, 2026 — post-M1 fixes from the baseline review
 

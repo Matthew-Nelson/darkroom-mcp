@@ -72,10 +72,17 @@ describe("openai provider", () => {
     expect(final).toBeLessThan(0.2);
   });
 
-  it.each([
-    ["generations-200-low.json", "draft"],
-    ["generations-200-high.json", "final"],
-  ] as const)("estimates at least the recorded real cost (%s)", async (fixture, quality) => {
+  it("prices a recorded high-quality response from its usage", async () => {
+    const result = await provider(fakeFetch(reply("generations-200-high.json")).fetch).generate(request, signal);
+    expect(result.actualCostUsd).toBe(0.052825); // 29 text tokens, 1,756 image tokens
+  });
+
+  it("estimates a medium-quality final above third-party token counts for a square (~439)", () => {
+    const p = provider(fakeFetch(reply("generations-200-low.json")).fetch);
+    expect(p.estimateCostUsd({ ...request, quality: "final" })).toBeGreaterThan((439 * 1.25 * 30) / 1e6);
+  });
+
+  it.each([["generations-200-low.json", "draft"]] as const)("estimates at least the recorded real cost (%s)", async (fixture, quality) => {
     const p = provider(fakeFetch(reply(fixture)).fetch);
     const req = { prompt: "a ceramic coffee mug on a wooden desk by a window, morning light, the mug reads DARKROOM in bold letters", aspectRatio: "1:1", quality } as const;
     const actual = (await p.generate(req, signal)).actualCostUsd ?? 0;
@@ -133,10 +140,10 @@ describe("openai provider", () => {
     });
   });
 
-  it("renders final at about 1MP and high quality", async () => {
+  it("renders final at about 1MP and medium quality", async () => {
     const { fetch, calls } = fakeFetch(reply("generations-200-low.json"));
     await provider(fetch).generate({ ...request, aspectRatio: "16:9", quality: "final" }, signal);
-    expect(calls[0]?.body).toMatchObject({ size: "1360x768", quality: "high" });
+    expect(calls[0]?.body).toMatchObject({ size: "1360x768", quality: "medium" });
   });
 
   it("returns the PNG, its real size, no seed, and the actual cost from usage", async () => {

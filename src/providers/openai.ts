@@ -31,11 +31,13 @@ export const OPENAI_RATES: Record<string, Rates> = {
 };
 
 // Image output tokens per tier, for the up-front estimate the ledger reserves against
-// the cap; settling replaces it with the actual cost. Measured in the M2 benchmark
-// (Oct 2, 2026, gpt-image-2.5-flare): tokens don't follow pixel count, and a square is
-// the most expensive shape (draft: 171 at 1:1, ~117 at 3:2; final: 1,756 at 1:1, 987
-// at 16:9). These are the square counts plus ~25%; the router warns if one is beaten.
-const ESTIMATED_OUTPUT_TOKENS: Record<Quality, number> = { draft: 215, final: 2200 };
+// the cap; settling replaces it with the actual cost. From the M2 benchmark (Oct 2,
+// 2026, gpt-image-2.5-flare): tokens don't follow pixel count, and a square is the most
+// expensive shape (low: 171 at 1:1, ~117 at 3:2; high: 1,756 at 1:1, 987 at 16:9).
+// draft is the measured square count plus ~25%. final (medium) wasn't measured:
+// third-party counts, which matched our low and high, put a medium square at ~439,
+// so 700 leaves extra room. The router warns if an actual cost beats its estimate.
+const ESTIMATED_OUTPUT_TOKENS: Record<Quality, number> = { draft: 215, final: 700 };
 
 // Prompt text tokens: the benchmark prompt ran ~3.4 characters per token; 3 errs high.
 const estimatePromptTokens = (prompt: string) => Math.ceil(prompt.length / 3) + 20;
@@ -44,8 +46,9 @@ const estimatePromptTokens = (prompt: string) => Math.ceil(prompt.length / 3) + 
 // usual 0.25MP: it renders at the smallest allowed size and at low quality instead.
 export const MIN_PIXELS = 655_360;
 
-type OpenAIQuality = "low" | "high";
-const QUALITY: Record<Quality, OpenAIQuality> = { draft: "low", final: "high" };
+// "high" costs ~4x "medium" for little visible gain in the M2 benchmark (Matt's call, Oct 2, 2026).
+type OpenAIQuality = "low" | "medium";
+const QUALITY: Record<Quality, OpenAIQuality> = { draft: "low", final: "medium" };
 
 /** The size OpenAI renders a tier at: our pixel budget, raised to the API's minimum, in multiples of 16. */
 export function openaiSize(aspectRatio: AspectRatio, quality: Quality): { width: number; height: number } {

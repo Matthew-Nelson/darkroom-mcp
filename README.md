@@ -77,7 +77,7 @@ For the key itself, a restricted key (Images: Write only) in a dedicated OpenAI 
 | `quality` | OpenAI quality | Size (1:1 / 16:9) |
 | --- | --- | --- |
 | `draft` | `low` | 816×816 / 1088×608 (the smallest allowed) |
-| `final` | `high` | 1024×1024 / 1360×768 (same as local) |
+| `final` | `medium` | 1024×1024 / 1360×768 (same as local) |
 
 OpenAI has no seed control, and it doesn't take a negative prompt; both are reported in `ignored_params`.
 
@@ -87,10 +87,10 @@ OpenAI has no seed control, and it doesn't take a negative prompt; both are repo
 | --- | --- | --- | --- |
 | `draft`, 1:1 | 816×816 | 10 s | $0.0053 |
 | `draft`, 3:2 | 992×672 | 8 s | $0.0037 |
-| `final`, 1:1 | 1024×1024 | 19 s | $0.0528 |
-| `final`, 16:9 | 1360×768 | 14 s | $0.0298 |
+| `high` (not used), 1:1 | 1024×1024 | 19 s | $0.0528 |
+| `high` (not used), 16:9 | 1360×768 | 14 s | $0.0298 |
 
-Square images cost the most; wide ones use fewer tokens despite having as many pixels. The default $2.00 daily cap covers about 37 square finals or 375 drafts. Before each request Darkroom reserves an estimate of about $0.007 for a draft and $0.066 for a final (the square cost plus about 25%), and logs a warning if a real cost ever exceeds its estimate.
+Square images cost the most; wide ones use fewer tokens despite having as many pixels. `final` uses `medium` quality: in the benchmark, `high` cost about 10× the `low` draft with little visible difference. `medium` wasn't measured; third-party token counts, which matched our `low` and `high` numbers, put a square at about $0.013. That's roughly 150 finals or 375 drafts under the default $2.00 cap. Before each request Darkroom reserves an estimate of about $0.007 for a draft and $0.021 for a final, and logs a warning if a real cost ever exceeds its estimate.
 
 **Spend cap.** Every paid request first reserves its estimated cost against `DARKROOM_DAILY_CAP_USD` (default $2.00) and is refused, before anything is sent, if that would go over. Afterwards the reservation becomes the actual cost OpenAI reports from token usage. A request that fails in a way OpenAI may still have billed (a timeout, a dropped connection, a server error) keeps its estimate; one rejected up front (a bad key, a blocked prompt) counts nothing.
 
