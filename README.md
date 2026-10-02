@@ -30,7 +30,7 @@ Start a new Claude Code session and ask for an image, for example "make me a pla
 | `prompt` | required | Up to 4,000 characters |
 | `negative_prompt` | none | Ignored by providers that don't support it; reported in `ignored_params` |
 | `aspect_ratio` | `1:1` | `1:1`, `3:2`, `2:3`, `16:9`, `9:16`. The result reports the actual pixel size |
-| `quality` | `draft` | `draft` is about 512px on the short edge, `final` about 1024px |
+| `quality` | `draft` | `draft` is about 0.25 megapixels (512×512 square, 688×384 at 16:9), `final` about 1 megapixel (1024×1024, 1360×768) |
 | `provider` | configured order | Only for when the user asks for a specific provider |
 | `seed` | random | Reuse a draft's seed to render it as `final` |
 | `filename` | from the prompt | Sanitized to a slug; a unique suffix is always added |

@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { createMockProvider, seedColor, wrap } from "../../src/providers/mock.js";
-import { sizeForAspectRatio } from "../../src/providers/sizes.js";
+import { sizeForQuality } from "../../src/providers/sizes.js";
 import type { AspectRatio, GenerateRequest, Quality } from "../../src/providers/types.js";
 
 const signal = new AbortController().signal;
@@ -12,21 +12,25 @@ const request = (over: Partial<GenerateRequest> = {}): GenerateRequest => ({
   ...over,
 });
 
-describe("sizeForAspectRatio", () => {
-  it.each<[AspectRatio, number, [number, number]]>([
-    ["1:1", 512, [512, 512]],
-    ["3:2", 512, [768, 512]],
-    ["2:3", 512, [512, 768]],
-    ["16:9", 512, [912, 512]],
-    ["9:16", 512, [512, 912]],
-    ["1:1", 1024, [1024, 1024]],
-    ["3:2", 1024, [1536, 1024]],
-    ["16:9", 1024, [1824, 1024]],
-  ])("%s at short edge %d -> %j", (ratio, shortEdge, expected) => {
-    const { width, height } = sizeForAspectRatio(ratio, shortEdge);
+describe("sizeForQuality", () => {
+  // Sized by pixel count (~0.26MP draft, ~1MP final), so wide images don't cost more than square ones.
+  it.each<[AspectRatio, Quality, [number, number]]>([
+    ["1:1", "draft", [512, 512]],
+    ["3:2", "draft", [624, 416]],
+    ["2:3", "draft", [416, 624]],
+    ["16:9", "draft", [688, 384]],
+    ["9:16", "draft", [384, 688]],
+    ["1:1", "final", [1024, 1024]],
+    ["3:2", "final", [1248, 832]],
+    ["16:9", "final", [1360, 768]],
+    ["9:16", "final", [768, 1360]],
+  ])("%s %s -> %j", (ratio, quality, expected) => {
+    const { width, height } = sizeForQuality(ratio, quality);
     expect([width, height]).toEqual(expected);
     expect(width % 16).toBe(0);
     expect(height % 16).toBe(0);
+    const target = quality === "draft" ? 512 * 512 : 1024 * 1024;
+    expect(Math.abs(width * height - target) / target).toBeLessThan(0.03);
   });
 });
 
@@ -42,12 +46,12 @@ describe("mock provider", () => {
   // Text rendering depends on system fonts, so assert on format and size, never bytes.
   it.each<[AspectRatio, Quality, number, number]>([
     ["1:1", "draft", 512, 512],
-    ["3:2", "draft", 768, 512],
-    ["2:3", "draft", 512, 768],
-    ["16:9", "draft", 912, 512],
-    ["9:16", "draft", 512, 912],
+    ["3:2", "draft", 624, 416],
+    ["2:3", "draft", 416, 624],
+    ["16:9", "draft", 688, 384],
+    ["9:16", "draft", 384, 688],
     ["1:1", "final", 1024, 1024],
-    ["9:16", "final", 1024, 1824],
+    ["9:16", "final", 768, 1360],
   ])("renders %s %s as a %dx%d PNG", async (aspectRatio, quality, width, height) => {
     const result = await mock.generate(request({ aspectRatio, quality }), signal);
     const meta = await sharp(result.png).metadata();

@@ -1,13 +1,13 @@
 # Progress
 
-## Current: M1 — Local generation (Z-Image) · status: not started
+## Current: M1 — Local generation (Z-Image) · status: in progress
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
 | Spec review and stress test | done | — |
 | Spike: local models on ComfyUI | done | — |
 | M0: Scaffold and mock | done | `m0` |
-| M1: Local generation (Z-Image) | not started | — |
+| M1: Local generation (Z-Image) | in progress | — |
 | M2: Ledger + first paid provider | not started | — |
 | M3: Router and guardrails | not started | — |
 | M4: Ship it | not started | — |
@@ -30,6 +30,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Deviations from spec
 
+- **`quality` tiers are a pixel budget, not a short edge** (agreed Oct 2, 2026, start of M1). `draft` ≈ 0.25MP, `final` ≈ 1MP, sides rounded to multiples of 16. The short-edge rule made a 16:9 `final` 1824×1024 (1.8× the pixels of a square one), slower and a memory risk on 16GB; diffusion models are trained near 1MP. Mock uses the same sizing. SPEC.md updated.
 - **Node 22+ instead of Node 20+** (decided Oct 2, 2026, after M0). Node 20 reached end-of-life in April 2026. `engines` is `>=22.12.0` (vitest 5's floor), CI tests Node 22 and 24, and vitest is 5.x. TypeScript stays on 6.0 because typescript-eslint doesn't support 7 yet.
 - **Additions to `generate_image` output:** `sidecar_path`, and `cost_is_estimate` (true when the provider didn't report an actual cost), so "actual vs. estimate" isn't ambiguous.
 - **`DARKROOM_OUTPUT_DIR` expands a leading `~/`.** Values in `~/.claude.json` aren't shell-expanded, and `~/...` is absolute in intent. Other relative paths are still rejected.

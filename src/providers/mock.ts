@@ -1,10 +1,9 @@
 import { randomInt } from "node:crypto";
 import sharp from "sharp";
-import { sizeForAspectRatio } from "./sizes.js";
+import { sizeForQuality } from "./sizes.js";
 import type { GenerateRequest, GenerateResult, ImageProvider } from "./types.js";
 
 const MODEL = "mock-placeholder-v1";
-const SHORT_EDGE = { draft: 512, final: 1024 } as const;
 
 /**
  * Draws the prompt and seed on a background whose color comes from the seed.
@@ -20,7 +19,7 @@ export function createMockProvider(): ImageProvider {
     async generate(req: GenerateRequest, signal: AbortSignal): Promise<GenerateResult> {
       signal.throwIfAborted();
       const seed = req.seed ?? randomInt(0, 2 ** 32);
-      const { width, height } = sizeForAspectRatio(req.aspectRatio, SHORT_EDGE[req.quality]);
+      const { width, height } = sizeForQuality(req.aspectRatio, req.quality);
       const svg = placeholderSvg({ width, height, seed, prompt: req.prompt });
       const png = await sharp(Buffer.from(svg)).png().toBuffer();
       signal.throwIfAborted();

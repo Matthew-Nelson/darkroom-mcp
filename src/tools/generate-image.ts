@@ -33,7 +33,7 @@ const inputSchema = {
   quality: z
     .enum(QUALITIES)
     .default("draft")
-    .describe('"draft" (~512px short edge, faster) for iterating; "final" (~1024px) once the composition is right.'),
+    .describe('"draft" (~0.25 megapixels, e.g. 512x512; faster) for iterating; "final" (~1 megapixel, e.g. 1024x1024) once the composition is right.'),
   provider: z
     .enum(PROVIDER_NAMES)
     .optional()

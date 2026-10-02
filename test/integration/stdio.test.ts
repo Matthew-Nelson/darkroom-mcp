@@ -79,14 +79,14 @@ describe("darkroom over stdio", () => {
     if (image?.type !== "image") throw new Error("expected an image block");
     expect(image.mimeType).toBe("image/jpeg");
     const preview = await sharp(Buffer.from(image.data, "base64")).metadata();
-    expect([preview.format, preview.width, preview.height]).toEqual(["jpeg", 768, 431]);
+    expect([preview.format, preview.width, preview.height]).toEqual(["jpeg", 768, 434]);
 
     const out = result.structuredContent as Record<string, unknown>;
     expect(out).toMatchObject({
       provider: "mock",
       model: "mock-placeholder-v1",
-      width: 1824,
-      height: 1024,
+      width: 1360,
+      height: 768,
       seed: 42,
       cost_usd: 0,
       cost_is_estimate: true,
@@ -99,7 +99,7 @@ describe("darkroom over stdio", () => {
     expect(pngPath).toMatch(/\/mug-test-[0-9a-f]{8}\.png$/);
     expect(dirname(pngPath)).toBe(dirname(out.sidecar_path as string));
     const png = await sharp(pngPath).metadata();
-    expect([png.format, png.width, png.height]).toEqual(["png", 1824, 1024]);
+    expect([png.format, png.width, png.height]).toEqual(["png", 1360, 768]);
 
     const sidecar = JSON.parse(await readFile(out.sidecar_path as string, "utf8")) as Record<string, unknown>;
     expect(sidecar).toMatchObject({
