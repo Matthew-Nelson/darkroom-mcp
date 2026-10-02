@@ -1,0 +1,46 @@
+{
+  "name": "darkroom-mcp",
+  "version": "0.0.0",
+  "description": "MCP server that gives Claude Code an image generation tool across swappable providers (local ComfyUI, OpenAI, Gemini, mock).",
+  "type": "module",
+  "license": "UNLICENSED",
+  "author": "Matt Nelson",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Matthew-Nelson/darkroom-mcp.git"
+  },
+  "bin": {
+    "darkroom-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "workflows"
+  ],
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run check && npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^20.19.43",
+    "eslint": "^10.11.0",
+    "globals": "^17.13.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^4.1.11"
+  }
+}
