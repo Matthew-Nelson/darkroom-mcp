@@ -1,13 +1,13 @@
 # Progress
 
-## Current: M1 — Local generation (Z-Image) · status: awaiting review
+## Current: M2 — Ledger + first paid provider · status: not started
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
 | Spec review and stress test | done | — |
 | Spike: local models on ComfyUI | done | — |
 | M0: Scaffold and mock | done | `m0` |
-| M1: Local generation (Z-Image) | awaiting review | — |
+| M1: Local generation (Z-Image) | done | `m1` |
 | M2: Ledger + first paid provider | not started | — |
 | M3: Router and guardrails | not started | — |
 | M4: Ship it | not started | — |
@@ -27,13 +27,13 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] `npm run check` passes (125 tests: 117 unit, 8 stdio integration); `npm run test:comfyui` passes against the real server (3 tests)
 - [x] Done when: a real Z-Image `final` image generated from Claude Code at zero cost, saved with its sidecar, without a client timeout
 - [x] Done when: health check with the GGUF plugin removed reports a clear, actionable error
-- [ ] Matt approved
-- [ ] Tagged `m1`
+- [x] Matt approved (ran the smoke-test checklist locally: all passed)
+- [x] Tagged `m1`
 
 ## Next up
 
-- Matt reviews M1. On approval: mark done, tag `m1`, push.
-- Decide the first paid provider (OpenAI vs. Gemini) before M2.
+- Decide the first paid provider (OpenAI vs. Gemini), then plan M2 (ledger, daily cap, enablement rules, first paid provider, provider contract suite) in a few bullets and confirm with Matt before coding.
+- Check current docs and prices for the chosen paid provider before writing it.
 
 ## Deviations from spec
 
@@ -56,7 +56,9 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Log
 
-### Oct 2, 2026 — M1 built, awaiting review
+### Oct 2, 2026 — M1 done (tagged `m1`)
+
+Matt approved after running the M1 smoke-test checklist locally (draft, draft → final, variation, progress, Esc cancel stopping the GPU job, ComfyUI stopped with default and explicit provider, timeout, missing plugin, `npm run test:comfyui`): all passed. Review change: free providers now report an actual $0 (`cost_is_estimate: false`).
 
 #### Build notes
 
