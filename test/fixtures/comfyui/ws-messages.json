@@ -1,0 +1,241 @@
+[
+  {
+    "type": "status",
+    "data": {
+      "status": {
+        "exec_info": {
+          "queue_remaining": 0
+        }
+      },
+      "sid": "00429e56-38cc-48d4-8e02-a734cf3e579b"
+    }
+  },
+  {
+    "type": "status",
+    "data": {
+      "status": {
+        "exec_info": {
+          "queue_remaining": 1
+        }
+      }
+    }
+  },
+  {
+    "type": "status",
+    "data": {
+      "status": {
+        "exec_info": {
+          "queue_remaining": 1
+        }
+      }
+    }
+  },
+  {
+    "type": "execution_start",
+    "data": {
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "timestamp": 1790960339320
+    }
+  },
+  {
+    "type": "execution_cached",
+    "data": {
+      "nodes": [],
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "timestamp": 1790960339322
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "vae",
+      "display_node": "vae",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "latent",
+      "display_node": "latent",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "clip",
+      "display_node": "clip",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "pos",
+      "display_node": "pos",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "neg",
+      "display_node": "neg",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "unet",
+      "display_node": "unet",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "shift",
+      "display_node": "shift",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "sample",
+      "display_node": "sample",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "progress",
+    "data": {
+      "value": 1,
+      "max": 8,
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "node": "sample"
+    }
+  },
+  {
+    "type": "progress",
+    "data": {
+      "value": 2,
+      "max": 8,
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "node": "sample"
+    }
+  },
+  {
+    "type": "progress",
+    "data": {
+      "value": 3,
+      "max": 8,
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "node": "sample"
+    }
+  },
+  {
+    "type": "progress",
+    "data": {
+      "value": 4,
+      "max": 8,
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "node": "sample"
+    }
+  },
+  {
+    "type": "progress",
+    "data": {
+      "value": 5,
+      "max": 8,
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "node": "sample"
+    }
+  },
+  {
+    "type": "progress",
+    "data": {
+      "value": 6,
+      "max": 8,
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "node": "sample"
+    }
+  },
+  {
+    "type": "progress",
+    "data": {
+      "value": 7,
+      "max": 8,
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "node": "sample"
+    }
+  },
+  {
+    "type": "progress",
+    "data": {
+      "value": 8,
+      "max": 8,
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "node": "sample"
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "decode",
+      "display_node": "decode",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": "output",
+      "display_node": "output",
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "executed",
+    "data": {
+      "node": "output",
+      "display_node": "output",
+      "output": {
+        "images": [
+          {
+            "filename": "ComfyUI_temp_ltpqi_00001_.png",
+            "subfolder": "",
+            "type": "temp"
+          }
+        ]
+      },
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  },
+  {
+    "type": "execution_success",
+    "data": {
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      "timestamp": 1790960439149
+    }
+  },
+  {
+    "type": "status",
+    "data": {
+      "status": {
+        "exec_info": {
+          "queue_remaining": 0
+        }
+      }
+    }
+  },
+  {
+    "type": "executing",
+    "data": {
+      "node": null,
+      "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15"
+    }
+  }
+]

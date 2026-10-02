@@ -1,0 +1,51 @@
+{
+  "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15": {
+    "outputs": {
+      "output": {
+        "images": [
+          {
+            "filename": "ComfyUI_temp_ltpqi_00001_.png",
+            "subfolder": "",
+            "type": "temp"
+          }
+        ]
+      }
+    },
+    "status": {
+      "status_str": "success",
+      "completed": true,
+      "messages": [
+        [
+          "execution_start",
+          {
+            "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+            "timestamp": 1790960339320
+          }
+        ],
+        [
+          "execution_cached",
+          {
+            "nodes": [],
+            "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+            "timestamp": 1790960339322
+          }
+        ],
+        [
+          "execution_success",
+          {
+            "prompt_id": "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+            "timestamp": 1790960439149
+          }
+        ]
+      ]
+    },
+    "meta": {
+      "output": {
+        "node_id": "output",
+        "display_node": "output",
+        "parent_node": null,
+        "real_node_id": "output"
+      }
+    }
+  }
+}

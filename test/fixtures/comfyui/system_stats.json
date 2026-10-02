@@ -1,0 +1,19 @@
+{
+  "system": {
+    "os": "darwin",
+    "comfyui_version": "0.38.0",
+    "python_version": "3.12.13 (main, Mar  3 2026, 12:39:30) [Clang 21.0.0 (clang-2100.0.123.102)]",
+    "pytorch_version": "2.14.1"
+  },
+  "devices": [
+    {
+      "name": "mps",
+      "type": "mps",
+      "index": null,
+      "vram_total": 17179869184,
+      "vram_free": 9011101696,
+      "torch_vram_total": 17179869184,
+      "torch_vram_free": 9011101696
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import type { Config, ProviderName } from "./config.js";
-import type { GenerateRequest, GenerateResult, ImageProvider } from "./providers/types.js";
+import type { GenerateRequest, GenerateResult, ImageProvider, ProgressListener } from "./providers/types.js";
 
 // M0 router: picks the explicit provider, or the first available and healthy one
 // in the configured order. Fallback on failure, health caching, and the spend
@@ -34,7 +34,7 @@ export class Router {
 
   async generate(
     req: GenerateRequest,
-    opts: { provider?: ProviderName | undefined; signal: AbortSignal },
+    opts: { provider?: ProviderName | undefined; signal: AbortSignal; onProgress?: ProgressListener },
   ): Promise<RoutedResult> {
     if (opts.provider && !this.config.providerOrder.includes(opts.provider)) {
       throw new NoProviderError(
@@ -65,7 +65,7 @@ export class Router {
         skipped.push({ provider: name, reason: `unhealthy: ${health.detail ?? "health check failed"}` });
         continue;
       }
-      const result = await provider.generate(req, opts.signal);
+      const result = await provider.generate(req, opts.signal, opts.onProgress);
       return { provider, result, skipped };
     }
 

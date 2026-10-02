@@ -2,6 +2,7 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ConfigError, loadConfig } from "./config.js";
 import { log } from "./log.js";
+import { WorkflowError } from "./providers/comfyui-workflow.js";
 import { createServer } from "./server.js";
 
 async function main(): Promise<void> {
@@ -12,7 +13,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  if (err instanceof ConfigError) log("error", err.message);
+  if (err instanceof ConfigError || err instanceof WorkflowError) log("error", err.message);
   else log("error", "failed to start", { error: err instanceof Error ? err.message : String(err) });
   process.exit(1);
 });

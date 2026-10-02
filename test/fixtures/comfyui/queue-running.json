@@ -1,0 +1,19 @@
+{
+  "queue_running": [
+    [
+      1,
+      "e2d25b5f-9e90-422f-a628-6ef2c8dd3d15",
+      {
+        "...": "graph omitted"
+      },
+      {
+        "client_id": "00429e56-38cc-48d4-8e02-a734cf3e579b",
+        "create_time": 1790960339320
+      },
+      [
+        "output"
+      ]
+    ]
+  ],
+  "queue_pending": []
+}

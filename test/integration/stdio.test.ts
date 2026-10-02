@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -33,6 +34,15 @@ async function connect(env: Record<string, string>): Promise<Client> {
   client = new Client({ name: "darkroom-test", version: "0.0.0" });
   await client.connect(transport);
   return client;
+}
+
+/** A local port with nothing listening on it. */
+async function closedPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
 }
 
 async function call(c: Client, args: Record<string, unknown>): Promise<CallToolResult> {
@@ -130,14 +140,36 @@ describe("darkroom over stdio", () => {
     }
   });
 
-  it("returns a clear error with the default order, since comfyui isn't implemented yet", async () => {
-    const c = await connect({});
+  it("sends progress notifications when the client asks for them", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
+    const updates: { progress: number; message?: string | undefined }[] = [];
+    const result = (await c.callTool({ name: "generate_image", arguments: { prompt: "hello" } }, undefined, {
+      onprogress: (p) => updates.push(p),
+    })) as CallToolResult;
+    expect(result.isError).toBeFalsy();
+    expect(updates[0]?.message).toMatch(/^Drawing placeholder \(\d+s\)$/);
+    expect(updates[0]?.progress).toBeGreaterThan(0);
+  });
+
+  it("with the default order and ComfyUI not running, says how to fix it", async () => {
+    const port = await closedPort();
+    const c = await connect({ COMFYUI_URL: `http://127.0.0.1:${port}` });
     const result = await call(c, { prompt: "hello" });
     expect(result.isError).toBe(true);
     expect(result.content[0]).toEqual({
       type: "text",
-      text: "No image provider could take this request (comfyui: not available in this version of Darkroom yet).",
+      text: `No image provider could take this request (comfyui: unhealthy: Can't reach ComfyUI at http://127.0.0.1:${port} (ECONNREFUSED). Is it running? Set COMFYUI_URL if it isn't at that address.).`,
     });
+  });
+
+  it("fails at startup when COMFYUI_WORKFLOW names a missing template", () => {
+    const run = spawnSync(process.execPath, [SERVER], {
+      env: { ...getDefaultEnvironment(), DARKROOM_OUTPUT_DIR: outputDir, COMFYUI_WORKFLOW: "nope" },
+      input: "",
+      encoding: "utf8",
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(`[darkroom] error: Can't load ComfyUI workflow "nope" (nope.json): ENOENT`);
   });
 
   it("exits with a readable message when config is invalid", () => {

@@ -1,0 +1,46 @@
+{
+  "205ca440-c99b-4aa7-9af3-a6e39c91eb4b": {
+    "outputs": {},
+    "status": {
+      "status_str": "error",
+      "completed": false,
+      "messages": [
+        [
+          "execution_start",
+          {
+            "prompt_id": "205ca440-c99b-4aa7-9af3-a6e39c91eb4b",
+            "timestamp": 1790960464394
+          }
+        ],
+        [
+          "execution_cached",
+          {
+            "nodes": [
+              "vae"
+            ],
+            "prompt_id": "205ca440-c99b-4aa7-9af3-a6e39c91eb4b",
+            "timestamp": 1790960464395
+          }
+        ],
+        [
+          "execution_interrupted",
+          {
+            "prompt_id": "205ca440-c99b-4aa7-9af3-a6e39c91eb4b",
+            "node_id": "sample",
+            "node_type": "KSampler",
+            "executed": [
+              "clip",
+              "unet",
+              "neg",
+              "pos",
+              "latent",
+              "shift"
+            ],
+            "timestamp": 1790960479775
+          }
+        ]
+      ]
+    },
+    "meta": {}
+  }
+}

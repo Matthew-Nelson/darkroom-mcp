@@ -1,13 +1,21 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type { CallToolResult, ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { PROVIDER_NAMES } from "../config.js";
 import { log } from "../log.js";
-import { ASPECT_RATIOS, ContentRefusedError, QUALITIES, type GenerateRequest } from "../providers/types.js";
+import {
+  ASPECT_RATIOS,
+  ContentRefusedError,
+  QUALITIES,
+  type GenerateRequest,
+  type ProgressListener,
+} from "../providers/types.js";
 import { NoProviderError, type Router } from "../router.js";
 import { makePreview, type Storage } from "../storage.js";
 
 export const MAX_PROMPT_LENGTH = 4000;
+export const HEARTBEAT_MS = 5000;
 
 const DESCRIPTION = `Generate an image from a text prompt, save it as a PNG with a JSON metadata sidecar, and return a viewable preview plus the saved file path.
 
@@ -91,10 +99,12 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
       };
 
       const started = performance.now();
+      const progress = startProgress(extra);
       try {
         const { provider, result, skipped } = await deps.router.generate(req, {
           provider: args.provider,
           signal: extra.signal,
+          ...(progress && { onProgress: progress.update }),
         });
         const latencyMs = Math.round(performance.now() - started);
 
@@ -134,9 +144,50 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
         };
       } catch (err) {
         return errorResult(err);
+      } finally {
+        progress?.stop();
       }
     },
   );
+}
+
+/**
+ * Sends MCP progress notifications while a provider works, if the client asked
+ * for them (sent a progressToken). Provider updates go out as they happen, and a
+ * heartbeat repeats the latest one so clients with idle timeouts keep waiting.
+ * `progress` is elapsed seconds: the spec requires it to increase on every
+ * notification, and no provider knows the total time up front.
+ */
+function startProgress(
+  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+): { update: ProgressListener; stop: () => void } | undefined {
+  const progressToken = extra._meta?.progressToken;
+  if (progressToken === undefined) return undefined;
+  const started = performance.now();
+  let last = 0;
+  let message = "Starting";
+
+  const send = () => {
+    const elapsed = (performance.now() - started) / 1000;
+    last = Math.max(Math.round(elapsed * 10) / 10, last + 0.1);
+    extra
+      .sendNotification({
+        method: "notifications/progress",
+        params: { progressToken, progress: last, message: `${message} (${Math.round(elapsed)}s)` },
+      })
+      .catch(() => undefined); // the client may have gone away; generation carries on
+  };
+  const timer = setInterval(send, HEARTBEAT_MS);
+  timer.unref();
+  return {
+    update(update) {
+      message = update.message;
+      send();
+    },
+    stop: () => {
+      clearInterval(timer);
+    },
+  };
 }
 
 function summarize(o: Output): string {

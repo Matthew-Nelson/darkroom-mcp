@@ -1,0 +1,72 @@
+{
+  "CLIPLoaderGGUF": {
+    "input": {
+      "required": {
+        "clip_name": [
+          [
+            "Qwen3-4B-Q4_K_M.gguf",
+            "clip_l.safetensors",
+            "t5-v1_1-xxl-encoder-Q4_K_M.gguf"
+          ]
+        ],
+        "type": [
+          [
+            "stable_diffusion",
+            "stable_cascade",
+            "sd3",
+            "stable_audio",
+            "mochi",
+            "ltxv",
+            "pixart",
+            "cosmos",
+            "lumina2",
+            "wan",
+            "hidream",
+            "chroma",
+            "ace",
+            "omnigen2",
+            "qwen_image",
+            "hunyuan_image",
+            "flux2",
+            "ovis",
+            "longcat_image",
+            "cogvideox",
+            "lens",
+            "pixeldit",
+            "ideogram4",
+            "boogu",
+            "krea2",
+            "joyimage",
+            "mage",
+            "minimax",
+            "yue2"
+          ]
+        ]
+      }
+    },
+    "input_order": {
+      "required": [
+        "clip_name",
+        "type"
+      ]
+    },
+    "is_input_list": false,
+    "output": [
+      "CLIP"
+    ],
+    "output_is_list": [
+      false
+    ],
+    "output_name": [
+      "CLIP"
+    ],
+    "name": "CLIPLoaderGGUF",
+    "display_name": "CLIPLoader (GGUF)",
+    "description": "",
+    "python_module": "custom_nodes.ComfyUI-GGUF",
+    "category": "bootleg",
+    "output_node": false,
+    "has_intermediate_output": false,
+    "search_aliases": []
+  }
+}

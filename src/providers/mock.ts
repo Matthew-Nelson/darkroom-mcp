@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import sharp from "sharp";
 import { sizeForQuality } from "./sizes.js";
-import type { GenerateRequest, GenerateResult, ImageProvider } from "./types.js";
+import type { GenerateRequest, GenerateResult, ImageProvider, ProgressListener } from "./types.js";
 
 const MODEL = "mock-placeholder-v1";
 
@@ -16,8 +16,9 @@ export function createMockProvider(): ImageProvider {
     supports: { negativePrompt: false, seed: true },
     estimateCostUsd: () => 0,
     healthCheck: () => Promise.resolve({ ok: true }),
-    async generate(req: GenerateRequest, signal: AbortSignal): Promise<GenerateResult> {
+    async generate(req: GenerateRequest, signal: AbortSignal, onProgress?: ProgressListener): Promise<GenerateResult> {
       signal.throwIfAborted();
+      onProgress?.({ message: "Drawing placeholder" });
       const seed = req.seed ?? randomInt(0, 2 ** 32);
       const { width, height } = sizeForQuality(req.aspectRatio, req.quality);
       const svg = placeholderSvg({ width, height, seed, prompt: req.prompt });

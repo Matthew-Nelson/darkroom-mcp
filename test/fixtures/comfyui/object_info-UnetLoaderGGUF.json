@@ -1,0 +1,37 @@
+{
+  "UnetLoaderGGUF": {
+    "input": {
+      "required": {
+        "unet_name": [
+          [
+            "flux1-schnell-Q4_K_S.gguf",
+            "z_image_turbo-Q4_K_M.gguf"
+          ]
+        ]
+      }
+    },
+    "input_order": {
+      "required": [
+        "unet_name"
+      ]
+    },
+    "is_input_list": false,
+    "output": [
+      "MODEL"
+    ],
+    "output_is_list": [
+      false
+    ],
+    "output_name": [
+      "MODEL"
+    ],
+    "name": "UnetLoaderGGUF",
+    "display_name": "Unet Loader (GGUF)",
+    "description": "",
+    "python_module": "custom_nodes.ComfyUI-GGUF",
+    "category": "bootleg",
+    "output_node": false,
+    "has_intermediate_output": false,
+    "search_aliases": []
+  }
+}

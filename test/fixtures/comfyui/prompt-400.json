@@ -1,0 +1,34 @@
+{
+  "error": {
+    "type": "prompt_outputs_failed_validation",
+    "message": "Prompt outputs failed validation",
+    "details": "",
+    "extra_info": {}
+  },
+  "node_errors": {
+    "unet": {
+      "errors": [
+        {
+          "type": "value_not_in_list",
+          "message": "Value not in list",
+          "details": "unet_name: 'missing.gguf' not in ['flux1-schnell-Q4_K_S.gguf', 'z_image_turbo-Q4_K_M.gguf']",
+          "extra_info": {
+            "input_name": "unet_name",
+            "input_config": [
+              [
+                "flux1-schnell-Q4_K_S.gguf",
+                "z_image_turbo-Q4_K_M.gguf"
+              ],
+              {}
+            ],
+            "received_value": "missing.gguf"
+          }
+        }
+      ],
+      "dependent_outputs": [
+        "output"
+      ],
+      "class_type": "UnetLoaderGGUF"
+    }
+  }
+}

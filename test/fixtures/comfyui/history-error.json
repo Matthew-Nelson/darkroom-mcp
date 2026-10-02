@@ -1,0 +1,53 @@
+{
+  "205ca440-c99b-4aa7-9af3-a6e39c91eb4b": {
+    "outputs": {},
+    "status": {
+      "status_str": "error",
+      "completed": false,
+      "messages": [
+        [
+          "execution_start",
+          {
+            "prompt_id": "205ca440-c99b-4aa7-9af3-a6e39c91eb4b",
+            "timestamp": 1790960464394
+          }
+        ],
+        [
+          "execution_cached",
+          {
+            "nodes": [
+              "vae"
+            ],
+            "prompt_id": "205ca440-c99b-4aa7-9af3-a6e39c91eb4b",
+            "timestamp": 1790960464395
+          }
+        ],
+        [
+          "execution_error",
+          {
+            "prompt_id": "205ca440-c99b-4aa7-9af3-a6e39c91eb4b",
+            "node_id": "sample",
+            "node_type": "KSampler",
+            "executed": [
+              "clip",
+              "unet",
+              "neg",
+              "pos",
+              "latent",
+              "shift"
+            ],
+            "exception_message": "MPS backend out of memory (MPS allocated: 11.20 GB, other allocations: 1.02 GB, max allowed: 12.00 GB).",
+            "exception_type": "torch.OutOfMemoryError",
+            "traceback": [
+              "  File \"execution.py\", line 1, in execute\n"
+            ],
+            "current_inputs": {},
+            "current_outputs": [],
+            "timestamp": 1790960479775
+          }
+        ]
+      ]
+    },
+    "meta": {}
+  }
+}

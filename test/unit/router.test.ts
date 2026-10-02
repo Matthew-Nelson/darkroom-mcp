@@ -91,6 +91,6 @@ describe("Router (M0)", () => {
     const mock = fakeProvider("mock");
     const controller = new AbortController();
     await router("mock", { mock }).generate(req, { signal: controller.signal });
-    expect(mock.generate).toHaveBeenCalledWith(req, controller.signal);
+    expect(mock.generate).toHaveBeenCalledWith(req, controller.signal, undefined);
   });
 });

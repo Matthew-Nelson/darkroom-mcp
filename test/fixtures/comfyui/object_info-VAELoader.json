@@ -1,0 +1,37 @@
+{
+  "VAELoader": {
+    "input": {
+      "required": {
+        "vae_name": [
+          [
+            "flux_ae.safetensors",
+            "pixel_space"
+          ]
+        ]
+      }
+    },
+    "input_order": {
+      "required": [
+        "vae_name"
+      ]
+    },
+    "is_input_list": false,
+    "output": [
+      "VAE"
+    ],
+    "output_is_list": [
+      false
+    ],
+    "output_name": [
+      "VAE"
+    ],
+    "name": "VAELoader",
+    "display_name": "Load VAE",
+    "description": "",
+    "python_module": "nodes",
+    "category": "model/loaders",
+    "output_node": false,
+    "has_intermediate_output": false,
+    "search_aliases": []
+  }
+}

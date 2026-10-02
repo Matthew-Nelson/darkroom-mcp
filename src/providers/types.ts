@@ -21,6 +21,15 @@ export interface GenerateResult {
   actualCostUsd?: number; // from provider usage data, when available
 }
 
+// What a provider is doing right now, e.g. "Sampling step 3/8". The tool turns
+// these into MCP progress notifications; providers just report state changes.
+export interface ProgressUpdate {
+  message: string;
+  step?: number;
+  totalSteps?: number;
+}
+export type ProgressListener = (update: ProgressUpdate) => void;
+
 export interface ImageProvider {
   name: string;
   isPaid: boolean;
@@ -28,7 +37,8 @@ export interface ImageProvider {
   estimateCostUsd(req: GenerateRequest): number;
   healthCheck(): Promise<{ ok: boolean; detail?: string }>;
   // Maps aspectRatio to the nearest size the provider supports.
-  generate(req: GenerateRequest, signal: AbortSignal): Promise<GenerateResult>;
+  // Must stop the provider's work (not just stop waiting) when `signal` aborts.
+  generate(req: GenerateRequest, signal: AbortSignal, onProgress?: ProgressListener): Promise<GenerateResult>;
 }
 
 // A policy refusal from the provider. Never triggers fallback, so a refused
