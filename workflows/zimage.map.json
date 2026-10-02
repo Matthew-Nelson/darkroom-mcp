@@ -1,0 +1,42 @@
+{
+  "model": "z-image-turbo-q4_k_m",
+  "seedVariety": "low",
+  "sizeMultiple": 16,
+  "inputs": {
+    "prompt": { "node": "pos", "input": "text" },
+    "seed": { "node": "sample", "input": "seed" },
+    "width": { "node": "latent", "input": "width" },
+    "height": { "node": "latent", "input": "height" }
+  },
+  "output": { "node": "output" },
+  "models": [
+    {
+      "node": "unet",
+      "input": "unet_name",
+      "file": "z_image_turbo-Q4_K_M.gguf",
+      "folder": "unet",
+      "source": "https://huggingface.co/jayn7/Z-Image-Turbo-GGUF"
+    },
+    {
+      "node": "clip",
+      "input": "clip_name",
+      "file": "Qwen3-4B-Q4_K_M.gguf",
+      "folder": "clip",
+      "source": "https://huggingface.co/unsloth/Qwen3-4B-GGUF"
+    },
+    {
+      "node": "vae",
+      "input": "vae_name",
+      "file": "flux_ae.safetensors",
+      "folder": "vae",
+      "source": "https://huggingface.co/Comfy-Org/z_image_turbo (split_files/vae/ae.safetensors, saved as flux_ae.safetensors)"
+    }
+  ],
+  "customNodes": [
+    {
+      "name": "ComfyUI-GGUF",
+      "source": "https://github.com/city96/ComfyUI-GGUF",
+      "nodes": ["UnetLoaderGGUF", "CLIPLoaderGGUF"]
+    }
+  ]
+}

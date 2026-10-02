@@ -1,0 +1,63 @@
+{
+  "unet": {
+    "class_type": "UnetLoaderGGUF",
+    "inputs": { "unet_name": "z_image_turbo-Q4_K_M.gguf" },
+    "_meta": { "title": "Load Z-Image Turbo (GGUF)" }
+  },
+  "shift": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": { "model": ["unet", 0], "shift": 3.0 },
+    "_meta": { "title": "Sampling shift" }
+  },
+  "clip": {
+    "class_type": "CLIPLoaderGGUF",
+    "inputs": { "clip_name": "Qwen3-4B-Q4_K_M.gguf", "type": "lumina2" },
+    "_meta": { "title": "Load Qwen3 text encoder (GGUF)" }
+  },
+  "vae": {
+    "class_type": "VAELoader",
+    "inputs": { "vae_name": "flux_ae.safetensors" },
+    "_meta": { "title": "Load VAE" }
+  },
+  "pos": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["clip", 0] },
+    "_meta": { "title": "Prompt" }
+  },
+  "neg": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": { "conditioning": ["pos", 0] },
+    "_meta": { "title": "Empty negative (cfg 1 ignores it)" }
+  },
+  "latent": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": { "width": 1024, "height": 1024, "batch_size": 1 },
+    "_meta": { "title": "Size" }
+  },
+  "sample": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["shift", 0],
+      "seed": 0,
+      "steps": 8,
+      "cfg": 1.0,
+      "sampler_name": "res_multistep",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "positive": ["pos", 0],
+      "negative": ["neg", 0],
+      "latent_image": ["latent", 0]
+    },
+    "_meta": { "title": "Sampler" }
+  },
+  "decode": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["sample", 0], "vae": ["vae", 0] },
+    "_meta": { "title": "Decode" }
+  },
+  "output": {
+    "class_type": "PreviewImage",
+    "inputs": { "images": ["decode", 0] },
+    "_meta": { "title": "Output (temp; Darkroom saves the permanent copy)" }
+  }
+}

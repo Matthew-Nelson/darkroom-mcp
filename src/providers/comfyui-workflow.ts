@@ -1,0 +1,123 @@
+import { readFile } from "node:fs/promises";
+import { z } from "zod";
+
+// A ComfyUI template is an API-format graph (workflows/<name>.json) plus a mapping
+// file (workflows/<name>.map.json) that says where the prompt, seed, and size go,
+// which node holds the output, and which model files and custom nodes it needs.
+// Code never hard-codes node IDs; only the mapping file knows them.
+
+// Resolved relative to this module so it works from src/, dist/, and an npx install.
+const WORKFLOWS_DIR = new URL("../../workflows/", import.meta.url);
+
+const nodeInput = z.object({ node: z.string().min(1), input: z.string().min(1) });
+
+const MappingSchema = z.object({
+  model: z.string().min(1),
+  seedVariety: z.enum(["low", "high"]),
+  sizeMultiple: z.number().int().positive(),
+  inputs: z.object({
+    prompt: nodeInput,
+    negativePrompt: nodeInput.optional(),
+    seed: nodeInput,
+    width: nodeInput,
+    height: nodeInput,
+  }),
+  output: z.object({ node: z.string().min(1) }),
+  models: z.array(
+    nodeInput.extend({
+      file: z.string().min(1),
+      folder: z.string().min(1),
+      source: z.string().min(1),
+    }),
+  ),
+  customNodes: z.array(
+    z.object({ name: z.string().min(1), source: z.string().min(1), nodes: z.array(z.string().min(1)) }),
+  ),
+});
+export type WorkflowMapping = z.infer<typeof MappingSchema>;
+
+const GraphSchema = z.record(
+  z.string(),
+  z.looseObject({ class_type: z.string().min(1), inputs: z.record(z.string(), z.unknown()) }),
+);
+export type WorkflowGraph = z.infer<typeof GraphSchema>;
+
+export interface Workflow {
+  name: string;
+  graph: WorkflowGraph;
+  mapping: WorkflowMapping;
+}
+
+export interface WorkflowValues {
+  prompt: string;
+  negativePrompt?: string | undefined;
+  seed: number;
+  width: number;
+  height: number;
+}
+
+export class WorkflowError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkflowError";
+  }
+}
+
+export async function loadWorkflow(name: string, dir: URL = WORKFLOWS_DIR): Promise<Workflow> {
+  const read = async (file: string): Promise<unknown> => {
+    try {
+      return JSON.parse(await readFile(new URL(file, dir), "utf8"));
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new WorkflowError(`Can't load ComfyUI workflow "${name}" (${file}): ${reason}`);
+    }
+  };
+  return parseWorkflow(name, await read(`${name}.json`), await read(`${name}.map.json`));
+}
+
+/** Validates a template and its mapping against each other. */
+export function parseWorkflow(name: string, rawGraph: unknown, rawMapping: unknown): Workflow {
+  const problem = (what: string, error: z.ZodError) =>
+    new WorkflowError(`ComfyUI workflow "${name}" has an invalid ${what}: ${z.prettifyError(error)}`);
+  const graph = GraphSchema.safeParse(rawGraph);
+  if (!graph.success) throw problem("template", graph.error);
+  const mapping = MappingSchema.safeParse(rawMapping);
+  if (!mapping.success) throw problem("mapping file", mapping.error);
+
+  const g = graph.data;
+  const m = mapping.data;
+  const refs = [...Object.values(m.inputs).filter((r) => r !== undefined), ...m.models];
+  for (const ref of refs) {
+    if (!(ref.input in (g[ref.node]?.inputs ?? {}))) {
+      throw new WorkflowError(
+        `ComfyUI workflow "${name}": the mapping points at input "${ref.input}" of node "${ref.node}", which the template doesn't have.`,
+      );
+    }
+  }
+  if (!g[m.output.node]) {
+    throw new WorkflowError(`ComfyUI workflow "${name}": output node "${m.output.node}" is not in the template.`);
+  }
+  return { name, graph: g, mapping: m };
+}
+
+/** Returns a copy of the template with the request's values and the mapped model files filled in. */
+export function buildGraph(workflow: Workflow, values: WorkflowValues): WorkflowGraph {
+  const graph = structuredClone(workflow.graph);
+  const set = (ref: { node: string; input: string }, value: unknown) => {
+    const node = graph[ref.node];
+    if (node) node.inputs[ref.input] = value;
+  };
+  const { inputs, models } = workflow.mapping;
+  set(inputs.prompt, values.prompt);
+  if (inputs.negativePrompt) set(inputs.negativePrompt, values.negativePrompt ?? "");
+  set(inputs.seed, values.seed);
+  set(inputs.width, values.width);
+  set(inputs.height, values.height);
+  for (const model of models) set(model, model.file);
+  return graph;
+}
+
+/** Every node class the template uses, for the health check. */
+export function nodeClasses(workflow: Workflow): string[] {
+  return [...new Set(Object.values(workflow.graph).map((n) => n.class_type))];
+}
