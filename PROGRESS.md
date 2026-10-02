@@ -1,13 +1,13 @@
 # Progress
 
-## Current: M1 — Local generation (Z-Image) · status: in progress
+## Current: M1 — Local generation (Z-Image) · status: awaiting review
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
 | Spec review and stress test | done | — |
 | Spike: local models on ComfyUI | done | — |
 | M0: Scaffold and mock | done | `m0` |
-| M1: Local generation (Z-Image) | in progress | — |
+| M1: Local generation (Z-Image) | awaiting review | — |
 | M2: Ledger + first paid provider | not started | — |
 | M3: Router and guardrails | not started | — |
 | M4: Ship it | not started | — |
@@ -22,14 +22,27 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] Matt approved (saw a placeholder image in his own session)
 - [x] Tagged `m0`
 
+## M1 gates
+
+- [x] `npm run check` passes (125 tests: 117 unit, 8 stdio integration); `npm run test:comfyui` passes against the real server (3 tests)
+- [x] Done when: a real Z-Image `final` image generated from Claude Code at zero cost, saved with its sidecar, without a client timeout
+- [x] Done when: health check with the GGUF plugin removed reports a clear, actionable error
+- [ ] Matt approved
+- [ ] Tagged `m1`
+
 ## Next up
 
-- Plan M1 (ComfyUI provider with the Z-Image template) in a few bullets and confirm with Matt before coding.
-- In M1, re-register `darkroom` without `DARKROOM_PROVIDER_ORDER=mock` (or with `comfyui,mock`) to test the real provider.
+- Matt reviews M1. On approval: mark done, tag `m1`, push.
 - Decide the first paid provider (OpenAI vs. Gemini) before M2.
+- Question for Matt: free providers (`mock`, `comfyui`) report `cost_is_estimate: true` with `cost_usd: 0`, because they don't set `actualCostUsd`. Should free providers report an actual $0 (`cost_is_estimate: false`)? The headless acceptance session flagged it too.
 
 ## Deviations from spec
 
+- **`ImageProvider.generate` takes an optional third argument, `onProgress`** (M1). Providers report state changes ("Queued in ComfyUI", "Sampling step 3/8"); the tool turns them into MCP progress notifications with a 5s heartbeat. `progress` is elapsed seconds, since MCP requires it to increase and no provider knows the total time.
+- **Provider factories can be async, and a missing `COMFYUI_WORKFLOW` template fails startup** (M1), matching "fail fast" for config.
+- **The ComfyUI template's output node is `PreviewImage`** (ComfyUI's temp folder), not `SaveImage`, so `DARKROOM_OUTPUT_DIR` holds the only permanent copy.
+- **The mapping file's model filenames are written into the graph at request time**, so the map is the source of truth; a test keeps the template's copies in sync so it still loads in ComfyUI as-is.
+- **Cancellation is targeted:** dequeue our job (`POST /queue {delete}`), then `POST /interrupt {prompt_id}` only if `/queue` shows our job running. A bare `/interrupt` would stop another client's job.
 - **`quality` tiers are a pixel budget, not a short edge** (agreed Oct 2, 2026, start of M1). `draft` ≈ 0.25MP, `final` ≈ 1MP, sides rounded to multiples of 16. The short-edge rule made a 16:9 `final` 1824×1024 (1.8× the pixels of a square one), slower and a memory risk on 16GB; diffusion models are trained near 1MP. Mock uses the same sizing. SPEC.md updated.
 - **Node 22+ instead of Node 20+** (decided Oct 2, 2026, after M0). Node 20 reached end-of-life in April 2026. `engines` is `>=22.12.0` (vitest 5's floor), CI tests Node 22 and 24, and vitest is 5.x. TypeScript stays on 6.0 because typescript-eslint doesn't support 7 yet.
 - **Additions to `generate_image` output:** `sidecar_path`, and `cost_is_estimate` (true when the provider didn't report an actual cost), so "actual vs. estimate" isn't ambiguous.
@@ -39,10 +52,34 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 ## Open questions
 
 - Which paid provider ships in v1: OpenAI (better text in images) or Gemini (cheaper)? Needed by M2.
-- Does Claude Code reset its MCP tool timeout on progress notifications? Verify in M1. (Docs research during M0 says stdio tools have a long wall-clock timeout plus an idle timeout that progress notifications reset; unverified.)
+- ~~Does Claude Code reset its MCP tool timeout on progress notifications?~~ Resolved in M1: yes for the idle timeout (30 min for stdio), and the wall-clock default is ~28h. Claude Code sends a `progressToken` on every `tools/call`. Details in SPEC.md under "Timeouts and progress".
 - License: `package.json` says `UNLICENSED` for now. Pick one before publishing in M4.
 
 ## Log
+
+### Oct 2, 2026 — M1 built, awaiting review
+
+#### Build notes
+
+Built: `quality` tiers by pixel count; `workflows/zimage.json` + `zimage.map.json` with a zod-validated loader; `comfyui` provider (submit, poll, fetch, actual size from the PNG, timeout including queue wait, targeted cancel, health check via `/system_stats` + `/object_info`, websocket step progress); MCP progress notifications in `generate_image`; offline fixtures recorded from ComfyUI 0.38.0 (`test/fixtures/comfyui/`); `npm run test:comfyui`; README section on local setup.
+
+Docs checked: ComfyUI 0.38.0 source on this machine (`server.py`: client-chosen `prompt_id`, targeted `/interrupt`, `/queue` delete, `/api/jobs/{id}/cancel`; websocket `progress` messages go only to the submitting `client_id`); MCP SDK 1.31 client (`DEFAULT_REQUEST_TIMEOUT_MSEC` 60s, `resetTimeoutOnProgress` opt-in); Claude Code docs (`mcp.md`, `env-vars.md`) for tool timeouts.
+
+**Acceptance run:**
+
+1. Re-registered: `claude mcp add darkroom -e DARKROOM_PROVIDER_ORDER=comfyui,mock -- node "$PWD/dist/index.js"` (local scope; ✔ Connected).
+2. **Final image.** Fresh headless session, with only the Darkroom tool allowed: `claude -p 'Use the darkroom generate_image tool to make a quality "final", 3:2 image of: "a ceramic coffee mug on a wooden desk by a window, morning light, the mug reads DARKROOM in bold letters". Do not pass provider. ...'`. Result: `comfyui` / `z-image-turbo-q4_k_m`, 1248×832, seed 2788901362, 234,414 ms (3m54s), $0, nothing skipped. Saved `~/.darkroom/images/a-ceramic-coffee-mug-on-a-wooden-desk-by-a-window-morning-2a0f88d0.png` (1.9 MB) plus its sidecar. From the preview, Claude described a white mug on a wooden desk by a window with "DARKROOM" spelled correctly. Claude Code's debug log showed "still running" every 30s and then "completed successfully in 3m 54s", with no timeout. **Pass.**
+3. **Progress token.** Wrapped the server in `tee` to record Claude Code's requests: `tools/call` carries `"_meta":{"claudecode/toolUseId":"…","progressToken":2}`, so the notifications are delivered.
+4. **GGUF plugin removed.** Moved `~/ComfyUI/custom_nodes/ComfyUI-GGUF` out of the folder, restarted ComfyUI, and asked headless Claude Code to generate with `provider: "comfyui"`. It quoted: `No image provider could take this request (comfyui: unhealthy: ComfyUI is missing the UnetLoaderGGUF, CLIPLoaderGGUF nodes: install the ComfyUI-GGUF custom node (https://github.com/city96/ComfyUI-GGUF) into ComfyUI's custom_nodes folder and restart ComfyUI.).` Then put the plugin back and stopped ComfyUI. **Pass.**
+
+**`npm run test:comfyui`** (real server, 2m01s): health ok; 512×512 draft in 98s with steps 1–8 reported; aborting at step 1 left ComfyUI's queue empty within about one sampler step (the GPU stopped).
+
+**Findings:**
+
+- Sampling runs ~10s/step at 512px and ~26s/step at 1024px. Model loading (text encoder on the CPU) is ~10s of each run.
+- ComfyUI only sends websocket progress to the `client_id` that submitted the job, so Darkroom opens its own socket per request.
+- Node's `fetch` rejects some ports outright ("bad port", e.g. 9). The "can't reach" message now falls back to the cause's message when there's no error code.
+- Claude Code logs MCP server stderr only during startup, so server logs after `ready` aren't visible in `~/.claude/debug/`.
 
 ### Oct 2, 2026 — M0 done (tagged `m0`)
 
