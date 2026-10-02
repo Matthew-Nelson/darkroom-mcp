@@ -1,12 +1,12 @@
 # Progress
 
-## Current: M0 — Scaffold and mock · status: awaiting review
+## Current: M1 — Local generation (Z-Image) · status: not started
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
 | Spec review and stress test | done | — |
 | Spike: local models on ComfyUI | done | — |
-| M0: Scaffold and mock | awaiting review | — |
+| M0: Scaffold and mock | done | `m0` |
 | M1: Local generation (Z-Image) | not started | — |
 | M2: Ledger + first paid provider | not started | — |
 | M3: Router and guardrails | not started | — |
@@ -19,13 +19,13 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] `npm run check` passes (94 tests: 88 unit, 6 stdio integration)
 - [x] Done when: `claude mcp add` registers the server with `DARKROOM_PROVIDER_ORDER=mock` and Claude Code returns a placeholder image it can see
 - [x] Preview payload size measured against Claude Code's MCP output limit
-- [ ] Matt approved
-- [ ] Tagged `m0`
+- [x] Matt approved (saw a placeholder image in his own session)
+- [x] Tagged `m0`
 
 ## Next up
 
-- Matt reviews M0. To try it: start a new Claude Code session in this repo (`darkroom` is registered at local scope with `DARKROOM_PROVIDER_ORDER=mock`) and ask for an image.
-- After approval: tag `m0`, push, then plan M1 (ComfyUI provider).
+- Plan M1 (ComfyUI provider with the Z-Image template) in a few bullets and confirm with Matt before coding.
+- In M1, re-register `darkroom` without `DARKROOM_PROVIDER_ORDER=mock` (or with `comfyui,mock`) to test the real provider.
 - Decide the first paid provider (OpenAI vs. Gemini) before M2.
 
 ## Deviations from spec
@@ -43,7 +43,11 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Log
 
-### Oct 2, 2026 — M0 built, awaiting review
+### Oct 2, 2026 — M0 done (tagged `m0`)
+
+Matt approved after seeing a placeholder image in his own Claude Code session.
+
+#### Build notes
 
 Built: strict TS scaffold, ESLint, vitest, CI (Node 20/22/24), zod config validation, `ImageProvider` interface, `mock` provider, storage (slug + unique id, realpath pinning, exclusive create, JPEG preview), M0 router, `generate_image` with `outputSchema`, stdio entry point, README.
 
