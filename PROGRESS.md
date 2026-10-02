@@ -56,6 +56,15 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Log
 
+### Oct 2, 2026 — post-M1 fixes from the baseline review
+
+A multi-model review of the M1 code (`reviews/baseline-m1-6e51a21.html`, not committed) verified two Medium findings, both fixed here with a failing test first:
+
+- A websocket frame that parses to `null` crashed the whole server: the listener read `msg.data` outside the `JSON.parse` try/catch, and listener errors are uncaught. Non-object frames are now dropped.
+- `COMFYUI_TIMEOUT_MS` had no upper bound. Node clamps timers above 2^31 − 1 ms to 1 ms, so a huge value failed every request at once. Config now rejects values above 2147483647.
+
+`npm run check` passes (127 tests). The review's Low findings (mostly the cancel path overstating what it stopped) are not addressed yet.
+
 ### Oct 2, 2026 — M1 done (tagged `m1`)
 
 Matt approved after running the M1 smoke-test checklist locally (draft, draft → final, variation, progress, Esc cancel stopping the GPU job, ComfyUI stopped with default and explicit provider, timeout, missing plugin, `npm run test:comfyui`): all passed. Review change: free providers now report an actual $0 (`cost_is_estimate: false`).
