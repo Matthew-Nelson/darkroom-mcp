@@ -84,6 +84,8 @@ export class Router {
         continue;
       }
 
+      // A cancel during the health checks above must not reserve spend for a call never made.
+      opts.signal.throwIfAborted();
       let reservation: Reservation | undefined;
       if (provider.isPaid) {
         try {

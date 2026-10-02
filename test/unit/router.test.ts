@@ -210,6 +210,13 @@ describe("Router spend", () => {
     expect(await ledger.spentTodayUsd()).toBe(0);
   });
 
+  it("doesn't reserve or call a paid provider when the request was already cancelled", async () => {
+    const openai = paidProvider();
+    await expect(router("openai", { openai }).generate(req, { signal: AbortSignal.abort() })).rejects.toThrow();
+    expect(openai.generate).not.toHaveBeenCalled();
+    expect(await ledger.spentTodayUsd()).toBe(0);
+  });
+
   it("doesn't call a paid provider when the ledger is unreadable", async () => {
     await writeFile(join(dir, LEDGER_FILENAME), "garbage");
     const openai = paidProvider();

@@ -96,7 +96,12 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
 
     async generate(req: GenerateRequest, signal: AbortSignal, onProgress?: ProgressListener): Promise<GenerateResult> {
       if (!apiKey) throw new ProviderError("DARKROOM_OPENAI_API_KEY is not set.", { notCharged: true });
-      signal.throwIfAborted();
+      try {
+        signal.throwIfAborted();
+      } catch {
+        // Not a bare AbortError: the router keeps the reservation for those, and nothing was sent yet.
+        throw new ProviderError("Cancelled before the request was sent to OpenAI.", { notCharged: true });
+      }
       const { width, height } = openaiSize(req.aspectRatio, req.quality);
       const quality = QUALITY[req.quality];
       onProgress?.({ message: `Waiting for OpenAI (${model}, ${quality} quality, ${width}×${height})` });

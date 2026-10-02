@@ -233,9 +233,12 @@ describe("openai provider", () => {
     expect(seen?.aborted).toBe(true);
   });
 
-  it("doesn't start when the signal is already aborted", async () => {
+  it("doesn't start when the signal is already aborted, and says nothing was charged", async () => {
     const { fetch, calls } = fakeFetch(reply("generations-200.json"));
-    await expect(provider(fetch).generate(request, AbortSignal.abort())).rejects.toThrow();
+    const err = await failure(provider(fetch).generate(request, AbortSignal.abort()));
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err.message).toBe("Cancelled before the request was sent to OpenAI.");
+    expect((err as ProviderError).notCharged).toBe(true);
     expect(calls).toHaveLength(0);
   });
 });
