@@ -17,7 +17,8 @@ TypeScript MCP server that gives Claude Code an image generation tool across swa
   1. **Automated:** `npm run check` (typecheck + lint + unit tests) passes. Required before every commit.
   2. **Acceptance:** the milestone's "done when" from `SPEC.md` was actually performed, with what was run and what happened recorded in `PROGRESS.md`.
   3. **Review:** Matt approved.
-- After approval: update `PROGRESS.md` (and `SPEC.md`/README if anything changed), commit, tag `m0`, `m1`, … then stop so Matt can `/clear`.
+- After approval: update `PROGRESS.md` (and `SPEC.md`/README if anything changed), commit, tag `m0`, `m1`, …, push with `git push origin main --tags`, then stop so Matt can `/clear`.
+- Push once per milestone (at tagging), not after every commit. Remote: `github.com/Matthew-Nelson/darkroom-mcp` (private).
 - When the spec turns out wrong, propose the change in a short note and log it under "Deviations" in `PROGRESS.md`; don't silently diverge.
 - Write a failing test that reproduces a bug before fixing it.
 - Ask before adding any runtime dependency beyond the stack in `SPEC.md`.
