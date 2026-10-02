@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M2 — Ledger + first paid provider · status: not started
+## Current: M2 — Ledger + first paid provider · status: in progress
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -8,7 +8,7 @@
 | Spike: local models on ComfyUI | done | — |
 | M0: Scaffold and mock | done | `m0` |
 | M1: Local generation (Z-Image) | done | `m1` |
-| M2: Ledger + first paid provider | not started | — |
+| M2: Ledger + first paid provider | in progress | — |
 | M3: Router and guardrails | not started | — |
 | M4: Ship it | not started | — |
 
@@ -32,11 +32,18 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Next up
 
-- Decide the first paid provider (OpenAI vs. Gemini), then plan M2 (ledger, daily cap, enablement rules, first paid provider, provider contract suite) in a few bullets and confirm with Matt before coding.
-- Check current docs and prices for the chosen paid provider before writing it.
+M2 plan (agreed Oct 2, 2026):
+
+- [ ] Ledger: JSON file in the output dir keyed by UTC date; reserve/settle; in-process mutex; atomic writes; cap check
+- [ ] Enablement rules + paid gate in the router (Darkroom key AND in order; no paid after a skipped free provider unless `DARKROOM_ALLOW_PAID_FALLBACK`); reserve → generate → settle
+- [ ] `openai` provider (plain fetch, `gpt-image-2.5-flare` default, model and prices in config, actual cost from usage, `moderation_blocked` → `ContentRefusedError`)
+- [ ] Provider contract suite (mock always; comfyui/openai behind env flags) + one recorded OpenAI fixture
+- [ ] Acceptance: same prompt on mock, comfyui, openai via `provider`; paid request over the cap refused
 
 ## Deviations from spec
 
+- **The first paid provider is OpenAI, and it is now the cheaper one** (decided Oct 2, 2026, start of M2). Checked today: `gpt-image-2.5-flare` bills $30/M image output tokens, roughly $0.006 (low) to $0.05 (high) per 1024² image, and accepts any size in multiples of 16, so it can render our pixel tiers exactly. Gemini 3.1 Flash Image is $0.045–$0.067 per image, and its Lite variant is $0.034 at 1K only. The spec called Gemini "cheapest"; SPEC.md updated.
+- **The paid gate for skipped free providers lands in M2, not M3.** Once a paid provider can run, the stub router's unhealthy-skip would otherwise reach it. Fallback on failure stays in M3.
 - **`ImageProvider.generate` takes an optional third argument, `onProgress`** (M1). Providers report state changes ("Queued in ComfyUI", "Sampling step 3/8"); the tool turns them into MCP progress notifications with a 5s heartbeat. `progress` is elapsed seconds, since MCP requires it to increase and no provider knows the total time.
 - **Provider factories can be async, and a missing `COMFYUI_WORKFLOW` template fails startup** (M1), matching "fail fast" for config.
 - **The ComfyUI template's output node is `PreviewImage`** (ComfyUI's temp folder), not `SaveImage`, so `DARKROOM_OUTPUT_DIR` holds the only permanent copy.
@@ -50,7 +57,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Open questions
 
-- Which paid provider ships in v1: OpenAI (better text in images) or Gemini (cheaper)? Needed by M2.
+- ~~Which paid provider ships in v1?~~ Resolved at the start of M2: OpenAI.
 - ~~Does Claude Code reset its MCP tool timeout on progress notifications?~~ Resolved in M1: yes for the idle timeout (30 min for stdio), and the wall-clock default is ~28h. Claude Code sends a `progressToken` on every `tools/call`. Details in SPEC.md under "Timeouts and progress".
 - License: `package.json` says `UNLICENSED` for now. Pick one before publishing in M4.
 
