@@ -23,6 +23,8 @@ export function redactKey(text: string, apiKey: string | undefined): string {
   let out = apiKey && apiKey.length >= 8 ? text.split(apiKey).join("[redacted]") : text;
   out = out.replace(/sk-[A-Za-z0-9_*-]{8,}/g, "sk-[redacted]");
   out = out.replace(/AIza[A-Za-z0-9_-]{20,}/g, "AIza[redacted]");
+  // Google's newer key format: two capitals and a dot, then ~50 key characters.
+  out = out.replace(/\b[A-Z]{2}\.[A-Za-z0-9_-]{30,}/g, "[redacted]");
   return out;
 }
 

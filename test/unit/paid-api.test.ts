@@ -12,6 +12,11 @@ describe("redactKey", () => {
     expect(redactKey("key AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q is bad", undefined)).toBe("key AIza[redacted] is bad");
   });
 
+  it("removes Google's newer key format (two capitals, a dot, then the key)", () => {
+    const fake = "XY.Ab8RN6FAKEfakeFAKEfakeFAKEfakeFAKEfakeFAKEfake12345";
+    expect(redactKey(`key ${fake} is bad`, undefined)).toBe("key [redacted] is bad");
+  });
+
   it("leaves ordinary text alone", () => {
     expect(redactKey("task-runner is fine", "x")).toBe("task-runner is fine");
   });
