@@ -224,7 +224,7 @@ npx -y @modelcontextprotocol/inspector --cli node dist/index.js -e DARKROOM_PROV
 
 The first lists `generate_image`, `list_providers`, and `list_images`; the second returns an image block plus the structured result (path, provider `mock`, 688×384). Checked with Inspector 2.9.0.
 
-**Eval.** `npm run eval` runs the ten prompts in `eval/prompts.json` against every provider in `DARKROOM_PROVIDER_ORDER` and writes `eval/report.md`. Each result is cached in `eval/results.json` by prompt, aspect ratio, provider, model, and quality, so rerunning only generates what's missing or failed, and `npm run eval -- --report` just rebuilds the report. A run prints what it will generate and the most it could cost; if anything costs money, it stops there until you rerun with `-- --yes`.
+**Eval.** `npm run eval` runs the ten prompts in `eval/prompts.json` against every provider in `DARKROOM_PROVIDER_ORDER` and writes `eval/report.md`. Each result is cached in `eval/results.json` by prompt, aspect ratio, provider, model, and quality, so rerunning only generates what's missing or failed, and `npm run eval -- --report` just rebuilds the report. The report shows every provider with cached results at the chosen quality, whatever `DARKROOM_PROVIDER_ORDER` is now. A run prints what it will generate and an estimate of the cost; if anything costs money, it stops there until you rerun with `-- --yes`. Ctrl+C cancels the request in progress (stopping ComfyUI's job), keeps finished results, leaves the report as it was, and exits 130.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

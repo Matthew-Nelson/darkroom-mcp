@@ -51,7 +51,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 - [x] `npm run check` passes (288 tests)
 - [x] Done when (adapted, see Deviations): a clean install from the packed tarball with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command generates a mock image in under five minutes (19 s)
-- [x] Eval run and report committed (20 of 20 images, $0.0999)
+- [x] Eval run and report committed (20 of 20 images, $0.10)
 - [x] ~~Demo GIF~~ skipped for v1 (Matt, Oct 3, 2026; see Deviations)
 - [ ] Matt approved and merged the PR
 - [ ] Tagged `m4`
@@ -115,11 +115,11 @@ npx's own install from an empty cache: about 4 s (82 MB downloaded; sharp's preb
 | Provider | Images | Median latency | Range | Cost |
 | --- | --- | --- | --- | --- |
 | comfyui (Z-Image Turbo Q4_K_M) | 10 of 10 | 4m 06s | 3m 50s to 4m 22s | $0 |
-| openai (`gpt-image-2.5-flare`, `medium`) | 10 of 10 | 9.2 s | 8.3 to 10.9 s | $0.0999 |
+| openai (`gpt-image-2.5-flare`, `medium`) | 10 of 10 | 9.2 s | 8.3 to 10.9 s | $0.10 ($0.099975) |
 
 OpenAI `medium` finals measured $0.0133 square (projected ~$0.013 in M2), $0.0089 at 3:2 or 2:3, $0.0078 at 16:9 or 9:16. All within the $0.021 estimate.
 
-**Spend:** $0.0999 (the OpenAI half of the eval, in the eval's ledger). Nothing else paid.
+**Spend:** $0.10 ($0.099975; the OpenAI half of the eval, in the eval's ledger). Nothing else paid.
 
 **Findings:**
 
