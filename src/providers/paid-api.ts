@@ -17,11 +17,12 @@ export function networkError(service: string, err: unknown, redact: (s: string) 
   );
 }
 
-/** Removes the API key, and anything shaped like an OpenAI key, from text bound for logs or Claude. */
+/** Removes the API key, and anything shaped like an OpenAI or Google key, from text bound for logs or Claude. */
 export function redactKey(text: string, apiKey: string | undefined): string {
   // A very short "key" would mangle ordinary text; real keys are far longer.
   let out = apiKey && apiKey.length >= 8 ? text.split(apiKey).join("[redacted]") : text;
   out = out.replace(/sk-[A-Za-z0-9_*-]{8,}/g, "sk-[redacted]");
+  out = out.replace(/AIza[A-Za-z0-9_-]{20,}/g, "AIza[redacted]");
   return out;
 }
 

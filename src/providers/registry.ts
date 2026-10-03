@@ -1,6 +1,7 @@
 import type { Config, ProviderName } from "../config.js";
 import { createComfyUIProvider } from "./comfyui.js";
 import { loadWorkflow } from "./comfyui-workflow.js";
+import { createGeminiProvider } from "./gemini.js";
 import { createMockProvider } from "./mock.js";
 import { createOpenAIProvider } from "./openai.js";
 import type { ImageProvider } from "./types.js";
@@ -13,6 +14,7 @@ const FACTORIES: Partial<Record<ProviderName, ProviderFactory>> = {
   comfyui: async ({ comfyui }) =>
     createComfyUIProvider({ url: comfyui.url, timeoutMs: comfyui.timeoutMs, workflow: await loadWorkflow(comfyui.workflow) }),
   openai: ({ openai }) => createOpenAIProvider(openai),
+  gemini: ({ gemini }) => createGeminiProvider(gemini),
 };
 
 /** Providers built in this version of Darkroom, whether or not they're in the order. */

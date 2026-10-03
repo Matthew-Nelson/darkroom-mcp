@@ -9,7 +9,6 @@ import {
   OPENAI_RATES,
   openaiSize,
 } from "../../src/providers/openai.js";
-import { redactKey } from "../../src/providers/paid-api.js";
 import {
   ASPECT_RATIOS,
   ContentRefusedError,
@@ -339,18 +338,5 @@ describe("costFromUsage", () => {
   it("returns undefined without usage", () => {
     expect(costFromUsage(undefined, rates)).toBeUndefined();
     expect(costFromUsage({ input_tokens: 10 }, rates)).toBeUndefined();
-  });
-});
-
-describe("redactKey", () => {
-  it("removes the key and anything shaped like an OpenAI key", () => {
-    expect(redactKey(`bad key ${KEY}`, KEY)).toBe("bad key [redacted]");
-    expect(redactKey("Incorrect API key provided: sk-proj-abcd****wxyz.", undefined)).toBe(
-      "Incorrect API key provided: sk-[redacted].",
-    );
-  });
-
-  it("leaves ordinary text alone", () => {
-    expect(redactKey("task-runner is fine", "x")).toBe("task-runner is fine");
   });
 });

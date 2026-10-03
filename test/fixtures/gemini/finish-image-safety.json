@@ -1,0 +1,19 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": []
+      },
+      "finishReason": "IMAGE_SAFETY",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 24,
+    "candidatesTokenCount": 0,
+    "totalTokenCount": 224,
+    "thoughtsTokenCount": 200
+  },
+  "modelVersion": "gemini-3.1-flash-image"
+}
