@@ -4,7 +4,24 @@ An MCP server that gives Claude Code an image generation tool. Claude writes the
 
 Providers are swappable: a free local model (Z-Image Turbo via ComfyUI) by default, OpenAI or Gemini as opt-in paid options, and a `mock` provider for tests and demos.
 
-> **Status:** early development (milestone M3). The `mock`, local `comfyui`, and paid `openai` providers work, with fallback between them and the `list_providers` and `list_images` tools; packaging and npm publish land in M4. See [`SPEC.md`](SPEC.md) for the plan.
+> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` providers work, with fallback between them, a daily spend cap, and three tools. Gemini and more ComfyUI templates are next. The package isn't on npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
+
+## How it works
+
+```mermaid
+flowchart LR
+  CC[Claude Code] -- stdio --> S[Darkroom server<br/>tools/]
+  S --> R[router]
+  R --> L[spend ledger<br/>reserve / settle]
+  R --> P1[mock]
+  R --> P2[comfyui]
+  R --> P3[openai]
+  P2 -- HTTP --> C[(Local ComfyUI)]
+  P3 -- HTTPS --> O[(OpenAI Images API)]
+  R --> ST[storage<br/>PNG + JSON sidecar + preview]
+```
+
+Claude Code starts Darkroom as a stdio MCP server. For each `generate_image` call, the router picks the first healthy provider in `DARKROOM_PROVIDER_ORDER` (or the one Claude was asked to use), reserves the estimated cost in the spend ledger before any paid call, and falls back down the list if a provider fails, but never from a free provider to a paid one unless you allow it. Storage saves the PNG and a JSON sidecar and returns a JPEG preview, so Claude can see the image, critique it, and try again. Each provider is one file behind a small `ImageProvider` interface (`src/providers/`); adding one means that file plus one line in `registry.ts`.
 
 ## Quick start (mock provider)
 
@@ -21,9 +38,19 @@ claude mcp add darkroom -e DARKROOM_PROVIDER_ORDER=mock -- node "$PWD/dist/index
 
 Start a new Claude Code session and ask for an image, for example "make me a placeholder hero image, 16:9". The mock provider draws the prompt and seed on a colored background, so you can try the whole flow without a GPU or API keys.
 
+### Packaged install
+
+`npm pack` builds `darkroom-mcp-0.1.0.tgz`, which installs anywhere with Node 22.12+ in one command, with no clone or build:
+
+```sh
+claude mcp add darkroom -e DARKROOM_PROVIDER_ORDER=mock -- npx -y -p /path/to/darkroom-mcp-0.1.0.tgz darkroom-mcp
+```
+
+From an empty npm cache this took 19 seconds from `claude mcp add` to Claude describing its first image (npx's install itself is about 4 seconds; sharp ships prebuilt binaries). If the package were on npm, the command would end in `-- npx -y darkroom-mcp`.
+
 ## Local generation (ComfyUI + Z-Image Turbo)
 
-The default provider runs [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) on your own machine through [ComfyUI](https://github.com/Comfy-Org/ComfyUI): free, private, and slow. On a 16GB Apple M3, a `draft` takes about 1.5 minutes and a `final` about 3.5 minutes. **16GB of memory is the practical minimum**; generation peaks around 11–12GB, so close other heavy apps.
+The default provider runs [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) on your own machine through [ComfyUI](https://github.com/Comfy-Org/ComfyUI): free, private, and slow. On a 16GB Apple M3, a `draft` takes about 1.5 minutes and a `final` 3.5 to 4 minutes (the eval's ten finals took 3m 50s to 4m 22s each). **16GB of memory is the practical minimum**; generation peaks around 11–12GB, so close other heavy apps.
 
 1. Install ComfyUI (a Python 3.12 venv works well; very new Python releases may not have PyTorch builds yet).
 2. Install the [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) custom node into `ComfyUI/custom_nodes` (the full-size weights don't fit in 16GB; the GGUF builds do).
@@ -91,7 +118,7 @@ OpenAI has no seed control, and it doesn't take a negative prompt; both are repo
 | `high` (not used), 1:1 | 1024×1024 | 19 s | $0.0528 |
 | `high` (not used), 16:9 | 1360×768 | 14 s | $0.0298 |
 
-Square images cost the most; wide ones use fewer tokens despite having as many pixels. `final` uses `medium` quality: in the benchmark, `high` cost about 10× the `low` draft with little visible difference. A `medium` 3:2 final measured $0.0089; a square should be about $0.013 (in line with third-party token counts, which were exact for our `high` square). That's roughly 150 finals or 375 drafts under the default $2.00 cap. Before each request Darkroom reserves an estimate of about $0.007 for a draft and $0.021 for a final, and logs a warning if a real cost ever exceeds its estimate.
+Square images cost the most; wide ones use fewer tokens despite having as many pixels. `final` uses `medium` quality: in the benchmark, `high` cost about 10× the `low` draft with little visible difference. The eval (Oct 3, 2026) measured `medium` finals at $0.0133 square, $0.0089 at 3:2 or 2:3, and $0.0078 at 16:9 or 9:16, about 9 seconds each. That's roughly 150 square finals or 375 drafts under the default $2.00 cap. Before each request Darkroom reserves an estimate of about $0.007 for a draft and $0.021 for a final, and logs a warning if a real cost ever exceeds its estimate.
 
 **Spend cap.** Every paid request first reserves its estimated cost against `DARKROOM_DAILY_CAP_USD` (default $2.00) and is refused, before anything is sent, if that would go over. Afterwards the reservation becomes the actual cost OpenAI reports from token usage. A request that fails in a way OpenAI may still have billed (a timeout, a dropped connection, a server error) keeps its estimate; one rejected up front (a bad key, a blocked prompt) counts nothing.
 
@@ -138,6 +165,28 @@ No inputs; read-only, and never generates or spends anything. Returns the config
 
 Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, and cost. Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be read or parsed, or their PNG is gone. A broken sidecar or a missing PNG is skipped quietly; any other read error (permissions, for example) is also logged to stderr. The PNG path always comes from the sidecar's file name, never from its contents.
 
+## Comparison: local vs. OpenAI
+
+`npm run eval` ran ten fixed prompts (text, people, objects, an icon, scenes) through both providers at `final` quality on Oct 3, 2026. The full grid is in [`eval/report.md`](eval/report.md).
+
+| Provider | Model | Median latency | Cost for 10 |
+| --- | --- | --- | --- |
+| `comfyui` (16GB M3) | Z-Image Turbo, Q4_K_M GGUF | 4m 06s (3m 50s to 4m 22s) | $0 |
+| `openai` | `gpt-image-2.5-flare`, `medium` | 9.2s | $0.10 |
+
+| Prompt | `comfyui` | `openai` |
+| --- | --- | --- |
+| a glass jar of honey with a kraft paper label that reads WILD CLOVER | <img src="eval/thumbs/honey-jar--comfyui--final-57d3b9e2.jpg" width="240" alt="Z-Image: honey jar with a white WILD CLOVER label and Kraft printed on the lid"> | <img src="eval/thumbs/honey-jar--openai--final-7cb55a4e.jpg" width="240" alt="OpenAI: honey jar with a kraft paper WILD CLOVER label"> |
+| a vintage film camera taken apart, its parts laid out neatly in rows on a green cutting mat | <img src="eval/thumbs/camera-knolling--comfyui--final-fa67c151.jpg" width="240" alt="Z-Image: three whole cameras above rows of lenses and rings"> | <img src="eval/thumbs/camera-knolling--openai--final-bfb46c40.jpg" width="240" alt="OpenAI: a camera disassembled into rows of parts"> |
+| a flat app icon of a camera aperture, rounded square, purple-to-orange gradient | <img src="eval/thumbs/aperture-icon--comfyui--final-cbf77d58.jpg" width="240" alt="Z-Image: a camera lens icon"> | <img src="eval/thumbs/aperture-icon--openai--final-b64bbbd8.jpg" width="240" alt="OpenAI: an aperture-blade icon"> |
+
+What the grid shows:
+
+- **Text:** both spelled all three test phrases correctly at `final` (FRESH BREAD DAILY, NIGHT SHIFT, WILD CLOVER). At `draft` size Z-Image has misspelled words before, so render text at `final` locally.
+- **Photos:** portraits, the cafe scene, the forest road, and the rainy street are convincing from both. OpenAI's are more dramatic (a sunrise, saturated neon); Z-Image's are plainer and closer to a literal reading.
+- **Following detailed instructions** is where they differ. Z-Image drew a camera lens instead of an aperture, laid out whole cameras instead of a camera taken apart, and printed "Kraft" on the lid instead of using a kraft paper label. OpenAI got all three. It also styled the poster and sign further than asked (a sunset, wheat sprigs).
+- **Time and money:** OpenAI was about 26× faster for about a cent an image. Locally, a `final` is a four-minute wait, which is why Claude iterates on drafts first.
+
 ## Configuration
 
 All configuration comes from environment variables, validated at startup. The server exits with a readable message if anything is invalid.
@@ -162,7 +211,26 @@ npm run check   # typecheck + lint + tests (mock only: no GPU, network, or keys)
 npm run build   # compile to dist/
 npm run test:comfyui   # real ComfyUI at http://127.0.0.1:8188 (or COMFYUI_URL): one draft render plus a cancel; takes ~2 minutes
 npm run test:contract  # provider contract suite; add DARKROOM_CONTRACT_COMFYUI=1 or DARKROOM_CONTRACT_OPENAI=1 to include real providers
+npm run eval           # ten fixed prompts per provider; writes eval/report.md (see "Comparison" above and "Eval" below)
 ```
+
+**Smoke test with the MCP Inspector.** After `npm run build`, drive the server without Claude Code. The web UI (`npx @modelcontextprotocol/inspector`) lets you connect to `node dist/index.js` and call each tool by hand; the CLI mode does the same from a shell (the server command comes first, then its options):
+
+```sh
+npx -y @modelcontextprotocol/inspector --cli node dist/index.js -e DARKROOM_PROVIDER_ORDER=mock --method tools/list
+npx -y @modelcontextprotocol/inspector --cli node dist/index.js -e DARKROOM_PROVIDER_ORDER=mock \
+  --method tools/call --tool-name generate_image --tool-arg prompt="a red bicycle" aspect_ratio=16:9
+```
+
+The first lists `generate_image`, `list_providers`, and `list_images`; the second returns an image block plus the structured result (path, provider `mock`, 688×384). Checked with Inspector 2.9.0.
+
+**Eval.** `npm run eval` runs the ten prompts in `eval/prompts.json` against every provider in `DARKROOM_PROVIDER_ORDER` and writes `eval/report.md`. Each result is cached in `eval/results.json` by prompt, aspect ratio, provider, model, and quality, so rerunning only generates what's missing or failed, and `npm run eval -- --report` just rebuilds the report. The report shows every provider with cached results at the chosen quality, whatever `DARKROOM_PROVIDER_ORDER` is now. A run prints what it will generate and an estimate of the cost; if anything costs money, it stops there until you rerun with `-- --yes`. Ctrl+C cancels the request in progress (stopping ComfyUI's job), keeps finished results, leaves the report as it was, and exits 130.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DARKROOM_EVAL_BUDGET_USD` | `0.50` | Paid-spend cap for the eval, per UTC day, in a ledger of its own (separate from `DARKROOM_DAILY_CAP_USD`) |
+| `DARKROOM_EVAL_QUALITY` | `final` | `draft` or `final` |
+| `DARKROOM_EVAL_OUTPUT_DIR` | `~/.darkroom/eval` | Full-size images, sidecars, and the eval's ledger. Kept out of `DARKROOM_OUTPUT_DIR` so `list_images` stays about your own work. Thumbnails for the report are committed in `eval/thumbs/` |
 
 Every provider passes the same contract suite (`test/contract/`): `mock` and `openai` (against a fake API) in every test run, and real ComfyUI or OpenAI only with the flags above. The real OpenAI run costs money, prints its estimated spend first, and bypasses the ledger.
 
@@ -171,3 +239,7 @@ ComfyUI parsing is tested offline against responses recorded from a real server 
 The integration tests build `dist/` and drive the real server over stdio with the MCP SDK client.
 
 Logs go to stderr, because stdout is the MCP protocol channel.
+
+## License
+
+[MIT](LICENSE)

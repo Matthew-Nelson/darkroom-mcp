@@ -3,13 +3,14 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-const SERVER = new URL("../../dist/index.js", import.meta.url).pathname;
+const SERVER = fileURLToPath(new URL("../../dist/index.js", import.meta.url));
 
 let outputDir: string;
 let client: Client | undefined;

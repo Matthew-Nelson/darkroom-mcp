@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, realpath, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, sep } from "node:path";
 import sharp from "sharp";
 
@@ -101,6 +102,17 @@ export class Storage {
       throw new StorageError(`Output directory ${this.root} now resolves elsewhere; refusing to write.`);
     }
   }
+}
+
+/**
+ * Writes a PNG that couldn't be saved to the output directory into the system temp
+ * folder instead, and returns its path, so a (possibly paid) image is never lost
+ * to a disk problem. Throws if that fails too.
+ */
+export async function rescuePng(png: Buffer, name: string): Promise<string> {
+  const path = join(tmpdir(), `darkroom-rescue-${slugify(name)}-${randomBytes(4).toString("hex")}.png`);
+  await writeFile(path, png, { flag: "wx" });
+  return path;
 }
 
 /** A JPEG preview for Claude to see, at most PREVIEW_MAX_EDGE on the long edge. */

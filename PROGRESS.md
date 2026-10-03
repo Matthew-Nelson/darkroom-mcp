@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M4 — Ship it · status: not started
+## Current: v1 complete (M4 tagged `m4`) · Phase 2 not started
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -10,7 +10,7 @@
 | M1: Local generation (Z-Image) | done | `m1` |
 | M2: Ledger + first paid provider | done | `m2` |
 | M3: Router and guardrails | done | `m3` |
-| M4: Ship it | not started | — |
+| M4: Ship it | done | `m4` |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
 
@@ -47,12 +47,25 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] Matt approved and merged PR #7 (after a multi-model review; all 4 Low findings fixed)
 - [x] Tagged `m3`
 
+## M4 gates
+
+- [x] `npm run check` passes (293 tests, after review fixes)
+- [x] Done when (adapted, see Deviations): a clean install from the packed tarball with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command generates a mock image in under five minutes (19 s)
+- [x] Eval run and report committed (20 of 20 images, $0.10)
+- [x] ~~Demo GIF~~ skipped for v1 (Matt, Oct 3, 2026; see Deviations)
+- [x] Matt approved and merged PR #8 (after a multi-model review; all 11 findings fixed)
+- [x] Tagged `m4`
+
 ## Next up
 
-- Plan M4 (eval run and report, README with setup per provider, config table, architecture diagram, and demo GIF, npm publish) and give Matt a short plan before coding. Pick a license before publishing (see Open questions).
+- v1 is done. Phase 2 (and the deferred demo GIF or an npm publish) waits for Matt's go-ahead.
 
 ## Deviations from spec
 
+- **No demo GIF in v1** (Matt, Oct 3, 2026). SPEC's M4 lists a README GIF of Claude generating, critiquing, and regenerating. Skipped for now; the README's visuals are the eval thumbnails. It can be added later as its own `docs/` PR (record the terminal, then trim and convert with ffmpeg).
+- **No npm publish in M4** (Matt, Oct 3, 2026: the repo stays private, and publishing is undecided). The acceptance test ran against the packed tarball instead (`npm pack`, then `claude mcp add ... -- npx -y -p <tgz> darkroom-mcp` with an empty npm cache), which exercises the same install path. Publishing later is `npm publish` plus swapping the README's command for `npx -y darkroom-mcp`. License: MIT.
+- **The eval budget is per UTC day** (M4). The eval keeps its own ledger in `DARKROOM_EVAL_OUTPUT_DIR` (default `~/.darkroom/eval`, apart from the images `list_images` shows), using the same daily-keyed ledger code with `DARKROOM_EVAL_BUDGET_USD` (default $0.50) as the cap. A run that would spend anything stops after printing its estimate unless given `--yes`. The cache key also includes aspect ratio and quality.
+- **`tsx` is a new devDependency** (M4), to run `eval/run.ts` straight from the TypeScript sources with the real router. No new runtime dependency.
 - **Only healthy results are cached for 60s** (M3). SPEC says "health check cached for 60s". Caching a failure would leave ComfyUI skipped for up to a minute after it's started; checks are cheap, so unhealthy providers are rechecked on every call. A failed `generate` also drops the provider's cached result.
 - **Which failures fall back** (M3): anything except a `ContentRefusedError`, the caller's own cancel, or a failure of an explicitly chosen provider (which is returned as is). Each failure is listed in `skipped_providers` as `failed: <reason>`.
 - **One PR per milestone** (decided Oct 2, 2026, start of M3). Replaces one PR per slice; the slices are now single-idea commits inside the milestone's PR. `CLAUDE.md` and SPEC.md updated.
@@ -77,9 +90,60 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 - ~~Which paid provider ships in v1?~~ Resolved at the start of M2: OpenAI.
 - ~~Does Claude Code reset its MCP tool timeout on progress notifications?~~ Resolved in M1: yes for the idle timeout (30 min for stdio), and the wall-clock default is ~28h. Claude Code sends a `progressToken` on every `tools/call`. Details in SPEC.md under "Timeouts and progress".
-- License: `package.json` says `UNLICENSED` for now. Pick one before publishing in M4.
+- ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 3, 2026 (UTC) — M4 done (tagged `m4`)
+
+Matt approved and PR #8 was merged (merge commit) after the review fixes. Spend for M4: $0.10 ($0.099975, the OpenAI half of the eval).
+
+### Oct 3, 2026 (UTC) — review of PR #8
+
+A multi-model review of `049885b` (opus and sonnet legs; the Gemini leg was skipped) posted 11 findings in the review body: 3 Medium, 8 Low, all in or around the eval. All fixed, with a failing test first where code changed:
+
+- **A1 (Medium):** thumbnails were named `<prompt>--<provider>.jpg` though results are cached per quality and model too, so a draft or other-model run overwrote the committed finals. Names now carry the quality and a hash of model, aspect ratio, and prompt; the committed thumbnails were renamed (same bytes). Result records now keep the model they're cached under.
+- **A2 (Medium), B2:** the report's columns came from the current `DARKROOM_PROVIDER_ORDER`, so `--report` in a default shell dropped the cached openai column, and an unhealthy provider showed as an empty "0 of 10" column. Columns are now every provider with results at that quality, configured or cached.
+- **A3 (Medium):** a save or thumbnail failure after a paid generation dropped the image, and the next run paid again. A thumbnail failure no longer fails the result (the next run rebuilds the thumbnail from the saved image), and a save failure keeps the PNG in the temp folder. The rescue moved into `storage.ts` (`rescuePng`), shared with `generate_image`.
+- **A11:** a cancelled run exited 0 and rewrote the report. Testing the fix against a real ComfyUI job found that **Ctrl+C left the GPU job running**: tsx forwards SIGINT, so the process got two, and with `process.once` the second killed it before ComfyUI's interrupt went out. The handler now stays registered; a draft cancelled mid-run showed "Interrupting prompt" in ComfyUI's log, an empty queue, exit 130, and the report and results unchanged.
+- **A4, B1, A5, A6, A7, A9:** a saved cap refusal named the wrong variable, "at most" on an estimate, $0.0999 vs. $0.10, the lockfile still at 0.0.0, a stale cache key in SPEC.md, and test paths built from `URL.pathname`.
+
+`npm run check`: 293 tests. Spend: $0 (the cancel test used ComfyUI).
+
+### Oct 3, 2026 (UTC) — M4 built and accepted; awaiting review
+
+#### Build notes
+
+Built: MIT license, the eval (`eval/`: prompts, harness, CLI, report, cached results, thumbnails; `npm run eval`), package metadata for 0.1.0, README sections (architecture diagram, packaged install, MCP Inspector smoke test, eval, local vs. OpenAI comparison). `tsx` added as a devDependency. Matt's calls at the start: MIT, eval at `final` on comfyui + openai, he records the GIF, repo stays private and no npm publish for now.
+
+**Acceptance run** (adapted for no publish, see Deviations): `npm run build && npm pack`, then in a new scratch project with an empty npm cache (`npm_config_cache` pointed at a new folder) and a scratch output dir:
+
+1. `claude mcp add darkroom -e DARKROOM_PROVIDER_ORDER=mock -e DARKROOM_OUTPUT_DIR=… -e npm_config_cache=… -- npx -y -p <scratch>/darkroom-mcp-0.1.0.tgz darkroom-mcp`
+2. `claude -p 'Use the darkroom generate_image tool to make a 16:9 draft image of "a lighthouse on a cliff at dusk". Then, based only on the returned preview, describe what you see…' --allowedTools mcp__darkroom__generate_image`
+3. Claude described the placeholder from the preview (dark maroon background, the prompt text, footer "mock · seed 2895557258 · 688×384") and reported the path, `mock`, 688×384, $0. PNG and sidecar were on disk; `claude mcp list` showed ✔ Connected. **19 s** from step 1 to the answer. **Pass.** The registration was removed afterwards.
+
+npx's own install from an empty cache: about 4 s (82 MB downloaded; sharp's prebuilt binary, no compile).
+
+**MCP Inspector** 2.9.0 CLI: `tools/list` listed the three tools; `tools/call generate_image` returned an image block plus the structured result (mock, 688×384). Commands are in the README.
+
+**Eval** (`final`, `~/.darkroom/eval`, eval budget $0.50):
+
+| Provider | Images | Median latency | Range | Cost |
+| --- | --- | --- | --- | --- |
+| comfyui (Z-Image Turbo Q4_K_M) | 10 of 10 | 4m 06s | 3m 50s to 4m 22s | $0 |
+| openai (`gpt-image-2.5-flare`, `medium`) | 10 of 10 | 9.2 s | 8.3 to 10.9 s | $0.10 ($0.099975) |
+
+OpenAI `medium` finals measured $0.0133 square (projected ~$0.013 in M2), $0.0089 at 3:2 or 2:3, $0.0078 at 16:9 or 9:16. All within the $0.021 estimate.
+
+**Spend:** $0.10 ($0.099975; the OpenAI half of the eval, in the eval's ledger). Nothing else paid.
+
+**Findings:**
+
+- Both models spelled all three test phrases right at `final`. The difference is instruction following: Z-Image drew a lens instead of an aperture, whole cameras instead of a camera taken apart, and "Kraft" printed on a lid instead of a kraft paper label. OpenAI got all three.
+- The first ComfyUI final (4m 22s, with model loading and other work on the machine) came within 40 s of the 300 s `COMFYUI_TIMEOUT_MS`. Warm runs were 3m 50s to 4m 12s. No change for now, but a busy machine could hit the default timeout on a `final`.
+- `npx <path-to.tgz>` tries to execute the path; a local tarball needs `npx -y -p <tgz> darkroom-mcp`.
+- Inspector 2.x's CLI wants the server command before its options (`--cli node dist/index.js -e … --method …`); with options first it looks for a config file and fails.
+- Inspector's schema portability check gives 7 warnings, all for nullable fields in `outputSchema` (`"type": ["string", "null"]`). Legal JSON Schema with no effect on Claude Code; left as is.
 
 ### Oct 3, 2026 (UTC) — M3 done (tagged `m3`)
 

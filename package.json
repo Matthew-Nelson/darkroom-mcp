@@ -1,13 +1,27 @@
 {
   "name": "darkroom-mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "MCP server that gives Claude Code an image generation tool across swappable providers (local ComfyUI, OpenAI, Gemini, mock).",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "claude-code",
+    "image-generation",
+    "comfyui",
+    "openai",
+    "z-image"
+  ],
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "author": "Matt Nelson",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Matthew-Nelson/darkroom-mcp.git"
+  },
+  "homepage": "https://github.com/Matthew-Nelson/darkroom-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/Matthew-Nelson/darkroom-mcp/issues"
   },
   "bin": {
     "darkroom-mcp": "dist/index.js"
@@ -27,6 +41,7 @@
     "test": "vitest run",
     "test:comfyui": "vitest run --config vitest.comfyui.config.ts",
     "test:contract": "vitest run test/contract",
+    "eval": "tsx eval/run.ts",
     "check": "npm run typecheck && npm run lint && npm test",
     "start": "node dist/index.js",
     "prepublishOnly": "npm run check && npm run build"
@@ -41,6 +56,7 @@
     "@types/node": "^22.0.0",
     "eslint": "^10.11.0",
     "globals": "^17.13.0",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.0",
     "vitest": "^5.0.3"
