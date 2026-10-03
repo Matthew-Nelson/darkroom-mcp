@@ -68,13 +68,13 @@ Tool descriptions must be written for the model: say when to use the tool, that 
 
 ## Providers
 
-v1 ships three providers, each a single file implementing the `ImageProvider` interface: `mock`, `comfyui`, and one paid provider (OpenAI, chosen at the start of M2). Gemini follows immediately after v1. Model names and prices below were checked on Oct 2, 2026; verify them against current provider docs before changing them. The model is set in config; each paid provider keeps its per-token rates in a small table at the top of its file (one line per model), and refuses to start with a model it has no rates for.
+v1 ships three providers, each a single file implementing the `ImageProvider` interface: `mock`, `comfyui`, and one paid provider (OpenAI, chosen at the start of M2). Gemini followed immediately after v1, as M5. Model names and prices below were checked on Oct 2, 2026; verify them against current provider docs before changing them. The model is set in config; each paid provider keeps its per-token rates in a small table at the top of its file (one line per model), and refuses to start with a model it has no rates for.
 
 | Provider | Cost | How it works | Notes |
 | --- | --- | --- | --- |
 | `comfyui` (default) | Free | HTTP to a local ComfyUI server: POST a workflow JSON to `/prompt`, poll `/history/{id}`, fetch bytes from `/view` | Ship one Z-Image Turbo template (GGUF, via the ComfyUI-GGUF plugin) in `workflows/`; Flux schnell and SDXL templates follow post-v1. Inject prompt, size, and seed by locating nodes through a small mapping file next to each template, not by hard-coded node ID. The mapping file also lists the template's model filenames, so the health check can verify each one exists. Exact files, sources, and timings are in "Local model spike results" below. Slow on Apple Silicon: default timeout 300s, configurable. |
 | `openai` | Paid, token-billed ($30 per million image output tokens for `gpt-image-2.5-flare`): measured in the M2 benchmark at $0.0053 for a `low` 816×816 draft and $0.0528 for a `high` 1024×1024 image (a `high` 1360×768: $0.0298). `final` uses `medium`: measured at $0.0089 for a 3:2 1248×832 final, about $0.013 projected for a square. Record actual usage from the response | OpenAI Images API (`POST /v1/images/generations`) with a gpt-image model; default `gpt-image-2.5-flare` | Best typography and instruction following, and the cheaper paid option as of Oct 2026. Any size in multiples of 16, ratio 1:3 to 3:1, at least 655,360 pixels; no seed. |
-| `gemini` | Paid, $0.045 (0.5K) to $0.067 (1K) per image for Gemini 3.1 Flash Image ($0.034 at 1K for Flash Lite Image); token-billed, so record actual usage from the response | Gemini API with a Flash Image model | Google's image API had no free tier as of early 2026; do not assume one. Sizes are set by aspect ratio, not pixels. Send the key in the `x-goog-api-key` header, never as a `?key=` query param, so it can't leak via URLs in errors. |
+| `gemini` | Paid, $0.045 (512) to $0.067 (1K) per image list price for `gemini-3.1-flash-image` ($0.034 at 1K only for Flash Lite Image); token-billed, so record actual usage from the response. Measured in M5 at $0.046 for a `draft` (512) and $0.0685 for a `final` (1K), the same at every aspect ratio | `generateContent` (`POST /v1beta/models/{model}:generateContent`) with `responseModalities: ["IMAGE"]` and `imageConfig` (`aspectRatio`, `imageSize`); default `gemini-3.1-flash-image` | No free tier; do not assume one. Sizes are set by aspect ratio and a size step (`512`, `1K`), not pixels. The seed is a 32-bit integer that keeps the composition but doesn't repeat an image exactly. Send the key in the `x-goog-api-key` header, never as a `?key=` query param, so it can't leak via URLs in errors. |
 | `mock` | Free | Generates a placeholder PNG (prompt text and seed drawn on a colored background, color derived from the seed) with no network | Used in tests and CI, and for demoing without a GPU or keys. Text rendering depends on system fonts, so tests assert on dimensions and format, never on image bytes or hashes. |
 
 The interface:
@@ -142,6 +142,8 @@ All configuration comes from environment variables, validated with zod at startu
 | `DARKROOM_OPENAI_API_KEY`, `DARKROOM_GEMINI_API_KEY` | No | none | Darkroom-specific keys; a paid provider needs its key **and** a place in the order |
 | `DARKROOM_OPENAI_MODEL` | No | `gpt-image-2.5-flare` | OpenAI image model; must be one the provider has rates for |
 | `DARKROOM_OPENAI_TIMEOUT_MS` | No | `180000` | Per-request OpenAI timeout |
+| `DARKROOM_GEMINI_MODEL` | No | `gemini-3.1-flash-image` | Gemini image model; must be one the provider has rates for |
+| `DARKROOM_GEMINI_TIMEOUT_MS` | No | `180000` | Per-request Gemini timeout |
 
 Security requirements:
 
@@ -218,7 +220,7 @@ Z-Image Turbo at smaller sizes (measured in an earlier round with less free memo
 
 ## Milestones and acceptance criteria
 
-Five milestones, each ending in a commit Matt can review; the agent stops after each one for a check-in rather than running ahead.
+Five milestones for v1 (M0–M4), then M5 after it, each ending in a commit Matt can review; the agent stops after each one for a check-in rather than running ahead.
 
 1. **M0: Scaffold and mock.** Repo, TypeScript strict, lint, vitest, CI, config validation, and the `mock` provider behind `generate_image`.
    - Done when: `claude mcp add` registers the server with `DARKROOM_PROVIDER_ORDER=mock` and Claude Code returns a placeholder image it can see. Measure the preview's payload size against Claude Code's MCP output limit.
@@ -232,7 +234,10 @@ Five milestones, each ending in a commit Matt can review; the agent stops after 
    - Done when: a fresh machine can install it with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command and generate a mock image in under five minutes.
    - Changed at the start of M4 (Oct 3, 2026): the repo stays private and publishing is Matt's later call, so the install test runs against the packed tarball (`npx -y -p <tgz> darkroom-mcp`, empty npm cache). The license is MIT.
 
-**Immediately after v1:** add the second paid provider, Gemini, as a single, self-contained commit (the "one file plus one registry line" demo), then the Flux schnell and SDXL templates. Gemini gets the same cost benchmark OpenAI got in M2: real `draft` and `final` calls at a few aspect ratios through the ledger, actual cost compared with list price and with OpenAI, its estimates calibrated from the results, and the numbers added to the README's cost table and the eval report.
+6. **M5: Gemini provider** (added Oct 3, 2026). The second paid provider, with the same cost benchmark OpenAI got in M2.
+   - Done when: the same prompt and aspect ratio run on mock, comfyui, openai, and gemini by changing only `provider`; a bad key fails clearly at $0 without the key appearing anywhere; with order `comfyui,gemini` and ComfyUI stopped, requests are refused by default and fall back to Gemini only with the flag; a Gemini request over the cap is refused; and the benchmark and eval are recorded.
+
+**Immediately after v1:** add the second paid provider, Gemini, as a single, self-contained commit (the "one file plus one registry line" demo), then the Flux schnell and SDXL templates. (Gemini became M5: the provider is one file plus one registry line, but it landed with two config variables, a shared-helpers refactor, and the benchmark as separate commits.) Gemini gets the same cost benchmark OpenAI got in M2: real `draft` and `final` calls at a few aspect ratios through the ledger, actual cost compared with list price and with OpenAI, its estimates calibrated from the results, and the numbers added to the README's cost table and the eval report.
 
 ## Phase 2 stretch goals
 
