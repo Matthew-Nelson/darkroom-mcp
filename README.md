@@ -129,6 +129,15 @@ Each image is saved as `<slug>-<id>.png` next to `<slug>-<id>.json`, which holds
 
 No inputs; read-only, and never generates or spends anything. Returns the configured order and whether paid fallback is on; for each provider (enabled ones first, in order): whether it's enabled and healthy, its model, whether it costs money, its estimated cost for a square `draft` and `final`, and a note saying why it can't be used, how to enable it, or that a paid provider behind a free one is only used when asked for by name. Also today's paid spend (including requests still running), the cap, and what's left, for the current UTC day. Health results come from the same 60-second cache the router uses.
 
+### `list_images`
+
+| Input | Default | Notes |
+| --- | --- | --- |
+| `limit` | `20` | 1 to 100 |
+| `provider` | all | Only images made by this provider |
+
+Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, and cost. Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be parsed or their PNG is gone. The PNG path always comes from the sidecar's file name, never from its contents.
+
 ## Configuration
 
 All configuration comes from environment variables, validated at startup. The server exits with a readable message if anything is invalid.

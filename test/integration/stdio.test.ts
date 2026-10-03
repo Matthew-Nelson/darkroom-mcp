@@ -53,7 +53,7 @@ describe("darkroom over stdio", () => {
   it("lists generate_image with input and output schemas", async () => {
     const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
     const { tools } = await c.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["generate_image", "list_providers"]);
+    expect(tools.map((t) => t.name)).toEqual(["generate_image", "list_providers", "list_images"]);
     const tool = tools[0];
     expect(tool?.description).toMatch(/only pass "provider" when the user explicitly asks/i);
     expect(tool?.inputSchema.required).toEqual(["prompt"]);
@@ -251,6 +251,30 @@ describe("darkroom over stdio", () => {
     expect(openai?.estimated_cost_usd?.draft).toBeGreaterThan(0);
     expect(out.spend).toMatchObject({ spent_usd: 0, cap_usd: 2 });
     expect(JSON.stringify(result)).not.toContain(FAKE_KEY);
+  });
+
+  it("list_images returns what generate_image saved, newest first, and filters by provider", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
+    const first = await call(c, { prompt: "first mug" });
+    const second = await call(c, { prompt: "second mug", aspect_ratio: "16:9" });
+    const tool = (await c.listTools()).tools.find((t) => t.name === "list_images");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+
+    const result = (await c.callTool({ name: "list_images", arguments: {} })) as CallToolResult;
+    expect(result.isError).toBeFalsy();
+    const out = result.structuredContent as { images: { path: string; prompt: string; aspect_ratio: string }[]; total: number };
+    expect(out.total).toBe(2);
+    expect(out.images.map((i) => i.prompt)).toEqual(["second mug", "first mug"]);
+    expect(out.images.map((i) => i.path)).toEqual([
+      (second.structuredContent as { path: string }).path,
+      (first.structuredContent as { path: string }).path,
+    ]);
+    expect(out.images[0]?.aspect_ratio).toBe("16:9");
+
+    const limited = (await c.callTool({ name: "list_images", arguments: { limit: 1 } })) as CallToolResult;
+    expect((limited.structuredContent as { images: unknown[] }).images).toHaveLength(1);
+    const filtered = (await c.callTool({ name: "list_images", arguments: { provider: "openai" } })) as CallToolResult;
+    expect(filtered.structuredContent).toEqual({ images: [], total: 0, unreadable: 0 });
   });
 
   it("fails at startup when DARKROOM_OPENAI_MODEL has no known prices", () => {

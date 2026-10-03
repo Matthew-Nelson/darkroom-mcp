@@ -6,6 +6,7 @@ import { createProviders, IMPLEMENTED_PROVIDERS } from "./providers/registry.js"
 import { Router } from "./router.js";
 import { Storage } from "./storage.js";
 import { registerGenerateImage } from "./tools/generate-image.js";
+import { registerListImages } from "./tools/list-images.js";
 import { registerListProviders } from "./tools/list-providers.js";
 
 // Resolved relative to this module so it works from dist/ and from an npx install.
@@ -18,5 +19,6 @@ export async function createServer(config: Config): Promise<McpServer> {
   const server = new McpServer({ name: "darkroom", title: "Darkroom", version: pkg.version });
   registerGenerateImage(server, { router, storage });
   registerListProviders(server, { config, router, ledger, implemented: IMPLEMENTED_PROVIDERS });
+  registerListImages(server, { storage });
   return server;
 }
