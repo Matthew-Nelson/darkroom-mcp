@@ -71,7 +71,7 @@ async function main(): Promise<void> {
       const provider = providers.get(col.provider);
       const cost = mine.reduce((sum, p) => sum + (provider?.estimateCostUsd(requestFor(p.prompt, evalConfig.quality)) ?? 0), 0);
       estimateUsd += cost;
-      const price = col.isPaid ? `about ${formatUsd(cost)} at most` : "free";
+      const price = col.isPaid ? `an estimated ${formatUsd(cost)}` : "free";
       say(`${col.provider} (${col.model}): ${mine.length} of ${prompts.length} to generate, ${price}`);
     }
     const spent = await ledger.spentTodayUsd();
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
     if (pending.length === 0) {
       say("Nothing to generate: every prompt has a cached result.");
     } else if (estimateUsd > 0 && !args.includes("--yes")) {
-      say(`This run costs money (about ${formatUsd(estimateUsd)} at most). Rerun with \`npm run eval -- --yes\` to go ahead.`);
+      say(`This run costs money (an estimated ${formatUsd(estimateUsd)}; actual costs can differ). Rerun with \`npm run eval -- --yes\` to go ahead.`);
       process.exitCode = 1;
       return;
     } else {
