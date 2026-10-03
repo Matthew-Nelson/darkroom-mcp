@@ -1,7 +1,7 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LEDGER_FILENAME } from "../../src/ledger.js";
 import { listImages } from "../../src/tools/list-images.js";
 
@@ -94,6 +94,21 @@ describe("listImages", () => {
     const out = await listImages(dir, { limit: 20 });
     expect(out.images.map((i) => i.prompt)).toEqual(["fine"]);
     expect(out.unreadable).toBe(3);
+  });
+
+  it("logs unexpected read errors, but not a broken sidecar or a missing PNG", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      await mkdir(join(dir, "folder-0123abcd.json")); // reading it fails with EISDIR
+      await saved({ at: "2026-10-02T10:00:00.000Z", sidecar: "{ not json" });
+      await saved({ at: "2026-10-02T11:00:00.000Z", png: false });
+      expect(await listImages(dir, { limit: 20 })).toMatchObject({ total: 0, unreadable: 3 });
+      const lines = stderr.mock.calls.map(([line]) => String(line));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(/^\[darkroom\] warn: couldn't read image sidecar .*folder-0123abcd\.json.*EISDIR/);
+    } finally {
+      stderr.mockRestore();
+    }
   });
 
   it("takes the PNG path from the sidecar's own name, never from its contents", async () => {

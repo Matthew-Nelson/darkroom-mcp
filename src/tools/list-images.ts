@@ -5,7 +5,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { PROVIDER_NAMES, type ProviderName } from "../config.js";
 import { formatUsd } from "../ledger.js";
-import type { Storage } from "../storage.js";
+import { log } from "../log.js";
+import { isErrno, type Storage } from "../storage.js";
 
 const DESCRIPTION = `List recently generated images, newest first, from the metadata saved next to each one: file path, prompt, provider, model, size, seed, and cost.
 
@@ -47,7 +48,10 @@ const imageSchema = z.object({
 const outputSchema = {
   images: z.array(imageSchema).describe("Newest first"),
   total: z.number().int().describe("Images matching the filter, before the limit"),
-  unreadable: z.number().int().describe("Sidecars skipped because they couldn't be parsed or their PNG is gone"),
+  unreadable: z
+    .number()
+    .int()
+    .describe("Sidecars skipped because they couldn't be read or parsed, or their PNG is gone (read errors are logged)"),
 };
 
 type Output = { [K in keyof typeof outputSchema]: z.infer<(typeof outputSchema)[K]> };
@@ -68,27 +72,35 @@ async function readImage(root: string, sidecarName: string): Promise<Image | und
   // The PNG path comes from the sidecar's own name, never its contents, so an edited
   // sidecar can't point outside the output folder.
   const path = sidecarPath.replace(/\.json$/, ".png");
+  let sidecar: unknown;
   try {
-    const parsed = sidecarSchema.safeParse(JSON.parse(await readFile(sidecarPath, "utf8")));
-    if (!parsed.success || !(await stat(path)).isFile()) return undefined;
-    const s = parsed.data;
-    return {
-      path,
-      sidecar_path: sidecarPath,
-      created_at: s.created_at,
-      prompt: s.request.prompt,
-      provider: s.provider,
-      model: s.model,
-      quality: s.request.quality,
-      aspect_ratio: s.request.aspect_ratio,
-      width: s.width,
-      height: s.height,
-      seed: s.seed,
-      cost_usd: s.cost_usd,
-    };
-  } catch {
-    return undefined; // unparseable JSON, or the PNG is gone
+    sidecar = JSON.parse(await readFile(sidecarPath, "utf8"));
+    if (!(await stat(path)).isFile()) return undefined;
+  } catch (err) {
+    // A broken sidecar or a deleted PNG is routine; anything else (permissions,
+    // a folder named like a sidecar, I/O errors) is worth a line on stderr.
+    if (!(err instanceof SyntaxError || isErrno(err, "ENOENT"))) {
+      log("warn", "couldn't read image sidecar", { path: sidecarPath, error: err instanceof Error ? err.message : String(err) });
+    }
+    return undefined;
   }
+  const parsed = sidecarSchema.safeParse(sidecar);
+  if (!parsed.success) return undefined;
+  const s = parsed.data;
+  return {
+    path,
+    sidecar_path: sidecarPath,
+    created_at: s.created_at,
+    prompt: s.request.prompt,
+    provider: s.provider,
+    model: s.model,
+    quality: s.request.quality,
+    aspect_ratio: s.request.aspect_ratio,
+    width: s.width,
+    height: s.height,
+    seed: s.seed,
+    cost_usd: s.cost_usd,
+  };
 }
 
 async function inBatches<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {

@@ -113,6 +113,6 @@ export async function makePreview(png: Buffer): Promise<{ jpeg: Buffer; width: n
   return { jpeg: data, width: info.width, height: info.height };
 }
 
-function isErrno(err: unknown, code: string): boolean {
+export function isErrno(err: unknown, code: string): boolean {
   return err instanceof Error && "code" in err && err.code === code;
 }
