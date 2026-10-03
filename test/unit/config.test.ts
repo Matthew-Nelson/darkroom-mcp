@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ConfigError, loadConfig } from "../../src/config.js";
+import { API_KEY_VARS, ConfigError, loadConfig, PAID_PROVIDERS } from "../../src/config.js";
 
 function problemsFor(env: NodeJS.ProcessEnv): string[] {
   try {
@@ -120,6 +120,14 @@ describe("loadConfig", () => {
     const config = loadConfig({ DARKROOM_OPENAI_API_KEY: "sk-test", DARKROOM_GEMINI_API_KEY: "g-test" });
     expect(config.openai.apiKey).toBe("sk-test");
     expect(config.gemini.apiKey).toBe("g-test");
+  });
+
+  it("names the key variable for every paid provider, and it's the one loadConfig reads", () => {
+    expect(Object.keys(API_KEY_VARS).sort()).toEqual([...PAID_PROVIDERS].sort());
+    for (const [name, envVar] of Object.entries(API_KEY_VARS)) {
+      const config = loadConfig({ [envVar]: "key" });
+      expect(config[name as "openai" | "gemini"].apiKey).toBe("key");
+    }
   });
 
   it("reads the OpenAI model and timeout", () => {

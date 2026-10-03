@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { PAID_PROVIDERS, PROVIDER_NAMES, type Config, type ProviderName } from "../config.js";
+import { API_KEY_VARS, PAID_PROVIDERS, PROVIDER_NAMES, type Config, type ProviderName } from "../config.js";
 import { formatUsd, type Ledger } from "../ledger.js";
 import type { Quality } from "../providers/types.js";
 import type { Router } from "../router.js";
@@ -9,12 +9,6 @@ import type { Router } from "../router.js";
 const DESCRIPTION = `List Darkroom's image providers: which are enabled and healthy, which cost money and roughly how much per image, and today's paid spend against the daily cap.
 
 Use this when the user asks which providers are available, why one wasn't used, or how much they've spent. It costs nothing and generates nothing.`;
-
-// Paid providers need their key as well as a place in the order.
-const KEY_VARS: Partial<Record<ProviderName, string>> = {
-  openai: "DARKROOM_OPENAI_API_KEY",
-  gemini: "DARKROOM_GEMINI_API_KEY",
-};
 
 // Estimates are for a square image and a typical prompt (paid text input is billed per token).
 const SAMPLE_PROMPT = "a ceramic coffee mug on a wooden desk by a window, morning light, ".repeat(4);
@@ -71,7 +65,7 @@ export async function providerStatus(deps: ListProvidersDeps): Promise<ProviderS
     if (!implemented.has(name)) return { ...unbuilt, detail: NOT_BUILT };
     const provider = router.provider(name);
     if (!provider) {
-      const key = KEY_VARS[name];
+      const key = API_KEY_VARS[name];
       return { ...unbuilt, detail: `Not enabled: add ${name} to DARKROOM_PROVIDER_ORDER${key ? ` and set ${key}` : ""}.` };
     }
 
