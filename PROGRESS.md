@@ -40,7 +40,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## M3 gates
 
-- [x] `npm run check` passes (274 tests)
+- [x] `npm run check` passes (276 tests, after review fixes)
 - [x] Done when: with ComfyUI stopped and order `comfyui,openai`, requests fail clearly by default (unhealthy skip doesn't reach the paid provider)
 - [x] Done when: they fall back to the paid provider only with `DARKROOM_ALLOW_PAID_FALLBACK=true`
 - [x] Done when: a generic `OPENAI_API_KEY` alone enables nothing
@@ -81,6 +81,16 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - License: `package.json` says `UNLICENSED` for now. Pick one before publishing in M4.
 
 ## Log
+
+### Oct 3, 2026 (UTC) — review of PR #7
+
+A multi-model review of `2ecc14e` posted 4 Low findings inline (nothing Medium or High). All fixed, with a failing test first where code changed:
+
+- **A1:** `list_providers` kept its own provider-to-key-variable table, against the spec's "no provider-specific logic in tools". The map moved to `config.ts` (`API_KEY_VARS`), with a test that it matches `PAID_PROVIDERS` and the variables `loadConfig` reads.
+- **B5:** `list_images` counted every read failure as `unreadable` without a trace. A broken sidecar or missing PNG stays quiet; other errors (e.g. EISDIR, EACCES) are now logged to stderr.
+- **A2, A7:** a schema description and a test title that no longer matched the code.
+
+Each comment has an inline reply. `npm run check`: 276 tests.
 
 ### Oct 3, 2026 (UTC) — M3 built and accepted; awaiting review
 

@@ -50,7 +50,7 @@ async function call(c: Client, args: Record<string, unknown>): Promise<CallToolR
 }
 
 describe("darkroom over stdio", () => {
-  it("lists generate_image with input and output schemas", async () => {
+  it("lists all three tools, and generate_image's input and output schemas", async () => {
     const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
     const { tools } = await c.listTools();
     expect(tools.map((t) => t.name)).toEqual(["generate_image", "list_providers", "list_images"]);

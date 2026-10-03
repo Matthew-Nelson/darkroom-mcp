@@ -86,6 +86,7 @@ describe("providerStatus", () => {
       enabled: true,
       healthy: null,
       detail: "Not available in this version of Darkroom yet.",
+      estimated_cost_usd: null,
     });
   });
 

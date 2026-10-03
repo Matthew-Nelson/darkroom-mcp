@@ -136,7 +136,7 @@ No inputs; read-only, and never generates or spends anything. Returns the config
 | `limit` | `20` | 1 to 100 |
 | `provider` | all | Only images made by this provider |
 
-Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, and cost. Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be parsed or their PNG is gone. The PNG path always comes from the sidecar's file name, never from its contents.
+Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, and cost. Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be read or parsed, or their PNG is gone. A broken sidecar or a missing PNG is skipped quietly; any other read error (permissions, for example) is also logged to stderr. The PNG path always comes from the sidecar's file name, never from its contents.
 
 ## Configuration
 

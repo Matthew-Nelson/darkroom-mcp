@@ -25,7 +25,7 @@ const providerSchema = z.object({
   estimated_cost_usd: z
     .object({ draft: z.number(), final: z.number() })
     .nullable()
-    .describe("Estimated cost of one square image at each quality; null when not enabled"),
+    .describe("Estimated cost of one square image at each quality; null when the provider isn't enabled or isn't built yet"),
 });
 
 const outputSchema = {
