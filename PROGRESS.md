@@ -49,7 +49,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## M4 gates
 
-- [x] `npm run check` passes (288 tests)
+- [x] `npm run check` passes (293 tests, after review fixes)
 - [x] Done when (adapted, see Deviations): a clean install from the packed tarball with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command generates a mock image in under five minutes (19 s)
 - [x] Eval run and report committed (20 of 20 images, $0.10)
 - [x] ~~Demo GIF~~ skipped for v1 (Matt, Oct 3, 2026; see Deviations)
@@ -93,6 +93,18 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 3, 2026 (UTC) — review of PR #8
+
+A multi-model review of `049885b` (opus and sonnet legs; the Gemini leg was skipped) posted 11 findings in the review body: 3 Medium, 8 Low, all in or around the eval. All fixed, with a failing test first where code changed:
+
+- **A1 (Medium):** thumbnails were named `<prompt>--<provider>.jpg` though results are cached per quality and model too, so a draft or other-model run overwrote the committed finals. Names now carry the quality and a hash of model, aspect ratio, and prompt; the committed thumbnails were renamed (same bytes). Result records now keep the model they're cached under.
+- **A2 (Medium), B2:** the report's columns came from the current `DARKROOM_PROVIDER_ORDER`, so `--report` in a default shell dropped the cached openai column, and an unhealthy provider showed as an empty "0 of 10" column. Columns are now every provider with results at that quality, configured or cached.
+- **A3 (Medium):** a save or thumbnail failure after a paid generation dropped the image, and the next run paid again. A thumbnail failure no longer fails the result (the next run rebuilds the thumbnail from the saved image), and a save failure keeps the PNG in the temp folder. The rescue moved into `storage.ts` (`rescuePng`), shared with `generate_image`.
+- **A11:** a cancelled run exited 0 and rewrote the report. Testing the fix against a real ComfyUI job found that **Ctrl+C left the GPU job running**: tsx forwards SIGINT, so the process got two, and with `process.once` the second killed it before ComfyUI's interrupt went out. The handler now stays registered; a draft cancelled mid-run showed "Interrupting prompt" in ComfyUI's log, an empty queue, exit 130, and the report and results unchanged.
+- **A4, B1, A5, A6, A7, A9:** a saved cap refusal named the wrong variable, "at most" on an estimate, $0.0999 vs. $0.10, the lockfile still at 0.0.0, a stale cache key in SPEC.md, and test paths built from `URL.pathname`.
+
+`npm run check`: 293 tests. Spend: $0 (the cancel test used ComfyUI).
 
 ### Oct 3, 2026 (UTC) — M4 built and accepted; awaiting review
 
