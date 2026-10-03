@@ -266,7 +266,7 @@ describe("results file", () => {
 
   it("loads the committed eval/results.json", async () => {
     const committed = await loadResults(fileURLToPath(new URL("../../eval/results.json", import.meta.url)));
-    expect(committed.filter((r) => r.ok)).toHaveLength(20);
+    expect(committed.filter((r) => r.ok)).toHaveLength(30);
   });
 
   it.each([

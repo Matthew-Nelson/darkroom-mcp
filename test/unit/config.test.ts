@@ -22,7 +22,7 @@ describe("loadConfig", () => {
       allowPaidFallback: false,
       comfyui: { url: "http://127.0.0.1:8188", workflow: "zimage", timeoutMs: 300_000 },
       openai: { apiKey: undefined, model: "gpt-image-2.5-flare", timeoutMs: 180_000 },
-      gemini: { apiKey: undefined },
+      gemini: { apiKey: undefined, model: "gemini-3.1-flash-image", timeoutMs: 180_000 },
     });
   });
 
@@ -107,6 +107,8 @@ describe("loadConfig", () => {
       ["COMFYUI_WORKFLOW", "../zimage", "must be a template name like 'zimage'"],
       ["DARKROOM_OPENAI_MODEL", "gpt image", "must be a model name like 'gpt-image-2.5-flare'"],
       ["DARKROOM_OPENAI_TIMEOUT_MS", "10", "must be at least 1000"],
+      ["DARKROOM_GEMINI_MODEL", "models/gemini", "must be a model name like 'gemini-3.1-flash-image'"],
+      ["DARKROOM_GEMINI_TIMEOUT_MS", "2147483648", "must be at most 2147483647 (about 24.8 days)"],
     ])("rejects %s=%s", (name, value, message) => {
       expect(problemsFor({ [name]: value })).toContain(`${name}: ${message}`);
     });
@@ -134,6 +136,12 @@ describe("loadConfig", () => {
     expect(
       loadConfig({ DARKROOM_OPENAI_MODEL: "gpt-image-2", DARKROOM_OPENAI_TIMEOUT_MS: "60000" }).openai,
     ).toMatchObject({ model: "gpt-image-2", timeoutMs: 60_000 });
+  });
+
+  it("reads the Gemini model and timeout", () => {
+    expect(
+      loadConfig({ DARKROOM_GEMINI_MODEL: "gemini-3.1-flash-lite-image", DARKROOM_GEMINI_TIMEOUT_MS: "90000" }).gemini,
+    ).toMatchObject({ model: "gemini-3.1-flash-lite-image", timeoutMs: 90_000 });
   });
 
   it("reports every problem at once, without echoing the bad values", () => {
