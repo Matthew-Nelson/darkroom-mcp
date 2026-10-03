@@ -44,8 +44,16 @@ const RunKey = z.object({
 const ResultSchema = z.discriminatedUnion("ok", [
   RunKey.extend({
     ok: z.literal(true),
-    image: z.string().describe("File name in the eval output directory"),
-    thumb: z.string().describe("Path relative to eval/"),
+    // Both are joined onto a directory (thumbnails are rebuilt from images) and the thumb
+    // goes into the report's HTML, so a hand-edited file can't point them anywhere else.
+    image: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]*\.png$/, "must be a PNG file name in the eval output directory, like 'x-1a2b3c4d.png'")
+      .describe("File name in the eval output directory"),
+    thumb: z
+      .string()
+      .regex(/^thumbs\/[a-z0-9][a-z0-9-]*\.jpg$/, "must be a thumbnail path like 'thumbs/x--comfyui--final-1a2b3c4d.jpg'")
+      .describe("Path relative to eval/"),
     width: z.number().int(),
     height: z.number().int(),
     seed: z.number().int().nullable(),
@@ -104,7 +112,12 @@ export async function loadResults(path: string): Promise<EvalResult[]> {
     if (isErrno(err, "ENOENT")) return [];
     throw err;
   }
-  return ResultsFileSchema.parse(JSON.parse(text)).results;
+  const parsed = ResultsFileSchema.safeParse(JSON.parse(text));
+  if (!parsed.success) {
+    const problems = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+    throw new Error(`${path} is invalid (fix or delete it):\n${problems.map((p) => `  - ${p}`).join("\n")}`);
+  }
+  return parsed.data.results;
 }
 
 export async function saveResults(path: string, results: EvalResult[]): Promise<void> {

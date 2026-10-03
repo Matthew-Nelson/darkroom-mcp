@@ -263,6 +263,26 @@ describe("results file", () => {
     await saveResults(path, results);
     expect(await loadResults(path)).toEqual(results);
   });
+
+  it("loads the committed eval/results.json", async () => {
+    const committed = await loadResults(fileURLToPath(new URL("../../eval/results.json", import.meta.url)));
+    expect(committed.filter((r) => r.ok)).toHaveLength(20);
+  });
+
+  it.each([
+    ["an image path with a parent directory", { image: "../../.ssh/id_ed25519" }],
+    ["an absolute image path", { image: "/etc/passwd" }],
+    ["an image that isn't a PNG", { image: "notes.txt" }],
+    ["a thumb outside thumbs/", { thumb: "../../outside.jpg" }],
+    ["a thumb in a subfolder", { thumb: "thumbs/../../outside.jpg" }],
+    ["a thumb with markup", { thumb: 'thumbs/x.jpg" onerror="alert(1)' }],
+  ])("rejects %s, so a tampered file can't point reads, writes, or the report elsewhere", async (_, bad) => {
+    const path = join(dir, "results.json");
+    const { router, columns } = setup({ mock: createMockProvider() });
+    const [good] = await run({ router, columns, ps: prompts.slice(0, 1) }).promise;
+    await writeFile(path, JSON.stringify({ version: 1, results: [{ ...good, ...bad }] }));
+    await expect(loadResults(path)).rejects.toThrow(/image|thumb/);
+  });
 });
 
 describe("buildReport", () => {
