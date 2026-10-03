@@ -4,7 +4,24 @@ An MCP server that gives Claude Code an image generation tool. Claude writes the
 
 Providers are swappable: a free local model (Z-Image Turbo via ComfyUI) by default, OpenAI or Gemini as opt-in paid options, and a `mock` provider for tests and demos.
 
-> **Status:** early development (milestone M3). The `mock`, local `comfyui`, and paid `openai` providers work, with fallback between them and the `list_providers` and `list_images` tools; packaging and npm publish land in M4. See [`SPEC.md`](SPEC.md) for the plan.
+> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` providers work, with fallback between them, a daily spend cap, and three tools. Gemini and more ComfyUI templates are next. The package isn't on npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
+
+## How it works
+
+```mermaid
+flowchart LR
+  CC[Claude Code] -- stdio --> S[Darkroom server<br/>tools/]
+  S --> R[router]
+  R --> L[spend ledger<br/>reserve / settle]
+  R --> P1[mock]
+  R --> P2[comfyui]
+  R --> P3[openai]
+  P2 -- HTTP --> C[(Local ComfyUI)]
+  P3 -- HTTPS --> O[(OpenAI Images API)]
+  R --> ST[storage<br/>PNG + JSON sidecar + preview]
+```
+
+Claude Code starts Darkroom as a stdio MCP server. For each `generate_image` call, the router picks the first healthy provider in `DARKROOM_PROVIDER_ORDER` (or the one Claude was asked to use), reserves the estimated cost in the spend ledger before any paid call, and falls back down the list if a provider fails, but never from a free provider to a paid one unless you allow it. Storage saves the PNG and a JSON sidecar and returns a JPEG preview, so Claude can see the image, critique it, and try again. Each provider is one file behind a small `ImageProvider` interface (`src/providers/`); adding one means that file plus one line in `registry.ts`.
 
 ## Quick start (mock provider)
 
@@ -20,6 +37,16 @@ claude mcp add darkroom -e DARKROOM_PROVIDER_ORDER=mock -- node "$PWD/dist/index
 ```
 
 Start a new Claude Code session and ask for an image, for example "make me a placeholder hero image, 16:9". The mock provider draws the prompt and seed on a colored background, so you can try the whole flow without a GPU or API keys.
+
+### Packaged install
+
+`npm pack` builds `darkroom-mcp-0.1.0.tgz`, which installs anywhere with Node 22.12+ in one command, with no clone or build:
+
+```sh
+claude mcp add darkroom -e DARKROOM_PROVIDER_ORDER=mock -- npx -y -p /path/to/darkroom-mcp-0.1.0.tgz darkroom-mcp
+```
+
+From an empty npm cache this took 19 seconds from `claude mcp add` to Claude describing its first image (npx's install itself is about 4 seconds; sharp ships prebuilt binaries). If the package were on npm, the command would end in `-- npx -y darkroom-mcp`.
 
 ## Local generation (ComfyUI + Z-Image Turbo)
 
@@ -91,7 +118,7 @@ OpenAI has no seed control, and it doesn't take a negative prompt; both are repo
 | `high` (not used), 1:1 | 1024×1024 | 19 s | $0.0528 |
 | `high` (not used), 16:9 | 1360×768 | 14 s | $0.0298 |
 
-Square images cost the most; wide ones use fewer tokens despite having as many pixels. `final` uses `medium` quality: in the benchmark, `high` cost about 10× the `low` draft with little visible difference. A `medium` 3:2 final measured $0.0089; a square should be about $0.013 (in line with third-party token counts, which were exact for our `high` square). That's roughly 150 finals or 375 drafts under the default $2.00 cap. Before each request Darkroom reserves an estimate of about $0.007 for a draft and $0.021 for a final, and logs a warning if a real cost ever exceeds its estimate.
+Square images cost the most; wide ones use fewer tokens despite having as many pixels. `final` uses `medium` quality: in the benchmark, `high` cost about 10× the `low` draft with little visible difference. The eval (Oct 3, 2026) measured `medium` finals at $0.0133 square, $0.0089 at 3:2 or 2:3, and $0.0078 at 16:9 or 9:16, about 9 seconds each. That's roughly 150 square finals or 375 drafts under the default $2.00 cap. Before each request Darkroom reserves an estimate of about $0.007 for a draft and $0.021 for a final, and logs a warning if a real cost ever exceeds its estimate.
 
 **Spend cap.** Every paid request first reserves its estimated cost against `DARKROOM_DAILY_CAP_USD` (default $2.00) and is refused, before anything is sent, if that would go over. Afterwards the reservation becomes the actual cost OpenAI reports from token usage. A request that fails in a way OpenAI may still have billed (a timeout, a dropped connection, a server error) keeps its estimate; one rejected up front (a bad key, a blocked prompt) counts nothing.
 
@@ -162,7 +189,26 @@ npm run check   # typecheck + lint + tests (mock only: no GPU, network, or keys)
 npm run build   # compile to dist/
 npm run test:comfyui   # real ComfyUI at http://127.0.0.1:8188 (or COMFYUI_URL): one draft render plus a cancel; takes ~2 minutes
 npm run test:contract  # provider contract suite; add DARKROOM_CONTRACT_COMFYUI=1 or DARKROOM_CONTRACT_OPENAI=1 to include real providers
+npm run eval           # ten fixed prompts per provider, for comparison; writes eval/report.md (see below)
 ```
+
+**Smoke test with the MCP Inspector.** After `npm run build`, drive the server without Claude Code. The web UI (`npx @modelcontextprotocol/inspector`) lets you connect to `node dist/index.js` and call each tool by hand; the CLI mode does the same from a shell (the server command comes first, then its options):
+
+```sh
+npx -y @modelcontextprotocol/inspector --cli node dist/index.js -e DARKROOM_PROVIDER_ORDER=mock --method tools/list
+npx -y @modelcontextprotocol/inspector --cli node dist/index.js -e DARKROOM_PROVIDER_ORDER=mock \
+  --method tools/call --tool-name generate_image --tool-arg prompt="a red bicycle" aspect_ratio=16:9
+```
+
+The first lists `generate_image`, `list_providers`, and `list_images`; the second returns an image block plus the structured result (path, provider `mock`, 688×384). Checked with Inspector 2.9.0.
+
+**Eval.** `npm run eval` runs the ten prompts in `eval/prompts.json` against every provider in `DARKROOM_PROVIDER_ORDER` and writes `eval/report.md`. Each result is cached in `eval/results.json` by prompt, aspect ratio, provider, model, and quality, so rerunning only generates what's missing or failed, and `npm run eval -- --report` just rebuilds the report. A run prints what it will generate and the most it could cost; if anything costs money, it stops there until you rerun with `-- --yes`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DARKROOM_EVAL_BUDGET_USD` | `0.50` | Paid-spend cap for the eval, per UTC day, in a ledger of its own (separate from `DARKROOM_DAILY_CAP_USD`) |
+| `DARKROOM_EVAL_QUALITY` | `final` | `draft` or `final` |
+| `DARKROOM_EVAL_OUTPUT_DIR` | `~/.darkroom/eval` | Full-size images, sidecars, and the eval's ledger. Kept out of `DARKROOM_OUTPUT_DIR` so `list_images` stays about your own work. Thumbnails for the report are committed in `eval/thumbs/` |
 
 Every provider passes the same contract suite (`test/contract/`): `mock` and `openai` (against a fake API) in every test run, and real ComfyUI or OpenAI only with the flags above. The real OpenAI run costs money, prints its estimated spend first, and bypasses the ledger.
 
@@ -171,3 +217,7 @@ ComfyUI parsing is tested offline against responses recorded from a real server 
 The integration tests build `dist/` and drive the real server over stdio with the MCP SDK client.
 
 Logs go to stderr, because stdout is the MCP protocol channel.
+
+## License
+
+[MIT](LICENSE)
