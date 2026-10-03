@@ -280,11 +280,13 @@ export async function runEval(o: RunOptions): Promise<EvalResult[]> {
       o.say(`    ${facts.width}×${facts.height}, ${formatSeconds(latencyMs)}, ${formatCost(facts)}`);
     } catch (err) {
       if (o.signal.aborted) break;
-      const error = err instanceof Error ? err.message : String(err);
+      // The router's cap message names the daily cap; in the eval, its own budget stands in for it.
+      const error = (err instanceof Error ? err.message : String(err)).replaceAll(
+        "DARKROOM_DAILY_CAP_USD",
+        "DARKROOM_EVAL_BUDGET_USD",
+      );
       result = { ...key, ok: false, error };
       o.say(`    failed: ${error}`);
-      // The router's message names the daily cap; here the eval's own budget stands in for it.
-      if (error.includes("spend cap reached")) o.say("    (for the eval, the cap is DARKROOM_EVAL_BUDGET_USD)");
     }
     results.push(result);
     await o.save(results);

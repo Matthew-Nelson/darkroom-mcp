@@ -212,6 +212,9 @@ describe("runEval", () => {
     expect(results[0]).toMatchObject({ ok: true, cost_usd: 0.25, cost_is_estimate: false });
     // $0.25 settled + $0.30 estimate for the next call would pass the $0.50 budget.
     expect(results[1]).toMatchObject({ ok: false, error: expect.stringMatching(/spend cap reached/) as unknown });
+    // The saved message names the eval's budget, not the daily cap the eval doesn't use.
+    expect(JSON.stringify(results[1])).toContain("Raise DARKROOM_EVAL_BUDGET_USD");
+    expect(JSON.stringify(results[1])).not.toContain("DARKROOM_DAILY_CAP_USD");
     expect(await ledger.spentTodayUsd()).toBe(0.25);
   });
 
