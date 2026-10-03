@@ -13,6 +13,7 @@
     "z-image"
   ],
   "type": "module",
+  "private": true,
   "license": "MIT",
   "author": "Matt Nelson",
   "repository": {
@@ -43,8 +44,7 @@
     "test:contract": "vitest run test/contract",
     "eval": "tsx eval/run.ts",
     "check": "npm run typecheck && npm run lint && npm test",
-    "start": "node dist/index.js",
-    "prepublishOnly": "npm run check && npm run build"
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
