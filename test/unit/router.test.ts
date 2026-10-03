@@ -25,6 +25,7 @@ afterEach(async () => {
 function fakeProvider(name: string, over: Partial<ImageProvider> = {}): ImageProvider {
   return {
     name,
+    model: `${name}-model`,
     isPaid: false,
     supports: { negativePrompt: false, seed: true },
     estimateCostUsd: () => 0,

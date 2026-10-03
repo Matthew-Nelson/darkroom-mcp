@@ -12,6 +12,7 @@ const MODEL = "mock-placeholder-v1";
 export function createMockProvider(): ImageProvider {
   return {
     name: "mock",
+    model: MODEL,
     isPaid: false,
     supports: { negativePrompt: false, seed: true },
     estimateCostUsd: () => 0,

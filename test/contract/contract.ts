@@ -15,9 +15,10 @@ export function providerContract(label: string, make: () => ImageProvider | Prom
   const timeout = opts.timeoutMs ?? 20_000;
 
   describe(`provider contract: ${label}`, () => {
-    it("declares a known name, whether it costs money, and what it supports", async () => {
+    it("declares a known name, its model, whether it costs money, and what it supports", async () => {
       const p = await make();
       expect(PROVIDER_NAMES).toContain(p.name);
+      expect(p.model).toMatch(/\S/);
       expect(p.isPaid).toBe(PAID_PROVIDERS.has(p.name as ProviderName));
       expect(Object.keys(p.supports).sort()).toEqual(["negativePrompt", "seed"]);
       expect(typeof p.supports.negativePrompt).toBe("boolean");
@@ -53,6 +54,7 @@ export function providerContract(label: string, make: () => ImageProvider | Prom
         async () => {
           const p = await make();
           const result = await p.generate(req, new AbortController().signal);
+          expect(result.model).toBe(p.model);
 
           const meta = await sharp(result.png).metadata();
           expect(meta.format).toBe("png");
