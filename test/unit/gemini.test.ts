@@ -248,7 +248,7 @@ describe("gemini provider", () => {
 
   it.each([
     [403, /^Gemini refused access \(HTTP 403\)\. Check that the key's project has the Gemini API enabled/],
-    [429, /^Gemini's rate limit or quota was hit \(HTTP 429\)\. Image models have no free tier/],
+    [429, /^Gemini's rate limit or quota was hit \(HTTP 429\)\. Wait and retry, or check the project's quotas\. A project without billing also gets this/],
     [404, /^Gemini rejected the request \(HTTP 404, NOT_FOUND\): no such model$/],
   ])("reports HTTP %s as uncharged", async (status, message) => {
     const body = { error: { code: status, message: "no such model", status: status === 404 ? "NOT_FOUND" : "X" } };

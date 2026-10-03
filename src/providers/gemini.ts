@@ -291,7 +291,7 @@ function describeHttpError(status: number, text: string, redact: (s: string) => 
   }
   if (status === 429) {
     return new ProviderError(
-      `Gemini's rate limit or quota was hit (HTTP 429). Image models have no free tier, so the key's project needs billing turned on${detail}`,
+      `Gemini's rate limit or quota was hit (HTTP 429). Wait and retry, or check the project's quotas. A project without billing also gets this, since image models have no free tier${detail}`,
       { notCharged: true },
     );
   }
