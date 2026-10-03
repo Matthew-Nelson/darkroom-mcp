@@ -252,12 +252,13 @@ interface ErrorBody {
 /** Actual cost from the response's token counts; undefined when usage is missing. */
 export function costFromUsage(usage: UsageMetadata | undefined, rates: Model): number | undefined {
   if (typeof usage?.promptTokenCount !== "number" || typeof usage.candidatesTokenCount !== "number") return undefined;
-  const imageTokens = usage.candidatesTokensDetails
-    ?.filter((d) => d.modality === "IMAGE")
-    .reduce((sum, d) => sum + (d.tokenCount ?? 0), 0);
-  // Output the breakdown doesn't account for (or all of it, without one) is billed
-  // at the higher image rate rather than under-counted.
-  const textTokens = imageTokens === undefined ? 0 : Math.max(0, usage.candidatesTokenCount - imageTokens);
+  const imageEntries = (usage.candidatesTokensDetails ?? []).filter((d) => d.modality === "IMAGE");
+  const imageTokens = imageEntries.reduce((sum, d) => sum + (d.tokenCount ?? 0), 0);
+  // With an IMAGE count, the rest of the output is priced at the text and thinking
+  // rate: real responses carry 414–482 unlabeled tokens beyond the image (see
+  // ESTIMATED_EXTRA_OUTPUT_TOKENS). With no IMAGE count to go on, all of it is priced
+  // at the image rate, so the ledger over-counts rather than under-counts.
+  const textTokens = imageEntries.length === 0 ? 0 : Math.max(0, usage.candidatesTokenCount - imageTokens);
   const imageOut = usage.candidatesTokenCount - textTokens;
   const thoughts = usage.thoughtsTokenCount ?? 0;
   const usd =

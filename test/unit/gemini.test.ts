@@ -336,8 +336,18 @@ describe("gemini costFromUsage", () => {
     expect(costFromUsage(usage, rates)).toBe(roundUsd((100 * 0.5 + 1120 * 60 + (30 + 200) * 3) / 1e6));
   });
 
-  it("prices undivided output at the image rate rather than under-count", () => {
+  it("prices output at the image rate when there's no breakdown, rather than under-count", () => {
     expect(costFromUsage({ promptTokenCount: 0, candidatesTokenCount: 1000 }, rates)).toBe(0.06);
+  });
+
+  it("prices output at the image rate when the breakdown has no IMAGE entry", () => {
+    expect(costFromUsage({ promptTokenCount: 0, candidatesTokenCount: 1120, candidatesTokensDetails: [] }, rates)).toBe(
+      0.0672,
+    );
+    const textOnly = [{ modality: "TEXT", tokenCount: 1120 }];
+    expect(costFromUsage({ promptTokenCount: 0, candidatesTokenCount: 1120, candidatesTokensDetails: textOnly }, rates)).toBe(
+      0.0672,
+    );
   });
 
   it("returns undefined without usage", () => {
