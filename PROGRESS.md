@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M4 — Ship it · status: awaiting review (GIF pending)
+## Current: M4 — Ship it · status: awaiting review
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -52,17 +52,17 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] `npm run check` passes (288 tests)
 - [x] Done when (adapted, see Deviations): a clean install from the packed tarball with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command generates a mock image in under five minutes (19 s)
 - [x] Eval run and report committed (20 of 20 images, $0.0999)
-- [ ] Demo GIF (Matt records, Claude edits)
+- [x] ~~Demo GIF~~ skipped for v1 (Matt, Oct 3, 2026; see Deviations)
 - [ ] Matt approved and merged the PR
 - [ ] Tagged `m4`
 
 ## Next up
 
-- Matt records the demo GIF; trim and convert it, add it to the README.
 - PR #8 is open for review.
 
 ## Deviations from spec
 
+- **No demo GIF in v1** (Matt, Oct 3, 2026). SPEC's M4 lists a README GIF of Claude generating, critiquing, and regenerating. Skipped for now; the README's visuals are the eval thumbnails. It can be added later as its own `docs/` PR (record the terminal, then trim and convert with ffmpeg).
 - **No npm publish in M4** (Matt, Oct 3, 2026: the repo stays private, and publishing is undecided). The acceptance test ran against the packed tarball instead (`npm pack`, then `claude mcp add ... -- npx -y -p <tgz> darkroom-mcp` with an empty npm cache), which exercises the same install path. Publishing later is `npm publish` plus swapping the README's command for `npx -y darkroom-mcp`. License: MIT.
 - **The eval budget is per UTC day** (M4). The eval keeps its own ledger in `DARKROOM_EVAL_OUTPUT_DIR` (default `~/.darkroom/eval`, apart from the images `list_images` shows), using the same daily-keyed ledger code with `DARKROOM_EVAL_BUDGET_USD` (default $0.50) as the cap. A run that would spend anything stops after printing its estimate unless given `--yes`. The cache key also includes aspect ratio and quality.
 - **`tsx` is a new devDependency** (M4), to run `eval/run.ts` straight from the TypeScript sources with the real router. No new runtime dependency.
@@ -94,7 +94,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Log
 
-### Oct 3, 2026 (UTC) — M4 built and accepted (GIF pending)
+### Oct 3, 2026 (UTC) — M4 built and accepted; awaiting review
 
 #### Build notes
 
