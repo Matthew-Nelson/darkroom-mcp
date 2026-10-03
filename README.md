@@ -125,6 +125,10 @@ Returns a JPEG preview (at most 768px on the long edge) for Claude to see, a tex
 
 Each image is saved as `<slug>-<id>.png` next to `<slug>-<id>.json`, which holds the full request and the result metadata. Files are never overwritten.
 
+### `list_providers`
+
+No inputs; read-only, and never generates or spends anything. Returns the configured order and whether paid fallback is on; for each provider (enabled ones first, in order): whether it's enabled and healthy, its model, whether it costs money, its estimated cost for a square `draft` and `final`, and a note saying why it can't be used, how to enable it, or that a paid provider behind a free one is only used when asked for by name. Also today's paid spend (including requests still running), the cap, and what's left, for the current UTC day. Health results come from the same 60-second cache the router uses.
+
 ## Configuration
 
 All configuration comes from environment variables, validated at startup. The server exits with a readable message if anything is invalid.

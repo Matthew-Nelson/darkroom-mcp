@@ -15,6 +15,9 @@ const FACTORIES: Partial<Record<ProviderName, ProviderFactory>> = {
   openai: ({ openai }) => createOpenAIProvider(openai),
 };
 
+/** Providers built in this version of Darkroom, whether or not they're in the order. */
+export const IMPLEMENTED_PROVIDERS: ReadonlySet<ProviderName> = new Set(Object.keys(FACTORIES) as ProviderName[]);
+
 /**
  * Builds the implemented providers that appear in the configured order. Throws
  * (failing startup) if one can't be built, e.g. COMFYUI_WORKFLOW names a missing template.

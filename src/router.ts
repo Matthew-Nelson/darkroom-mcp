@@ -142,6 +142,11 @@ export class Router {
     throw new NoProviderError(`No image provider could take this request (${reasons}).`, skipped);
   }
 
+  /** A built provider from the configured order, if there is one by that name. */
+  provider(name: ProviderName): ImageProvider | undefined {
+    return this.providers.get(name);
+  }
+
   /** The provider's health, reusing a healthy result for HEALTH_CACHE_MS. A check that throws counts as unhealthy. */
   async health(name: ProviderName, provider: ImageProvider): Promise<{ ok: boolean; detail?: string }> {
     if ((this.healthyUntil.get(name) ?? 0) > Date.now()) return { ok: true };

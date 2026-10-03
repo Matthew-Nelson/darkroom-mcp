@@ -53,7 +53,7 @@ describe("darkroom over stdio", () => {
   it("lists generate_image with input and output schemas", async () => {
     const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
     const { tools } = await c.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["generate_image"]);
+    expect(tools.map((t) => t.name)).toEqual(["generate_image", "list_providers"]);
     const tool = tools[0];
     expect(tool?.description).toMatch(/only pass "provider" when the user explicitly asks/i);
     expect(tool?.inputSchema.required).toEqual(["prompt"]);
@@ -224,6 +224,33 @@ describe("darkroom over stdio", () => {
     expect(block?.type === "text" && block.text).toContain(
       "openai: not used because comfyui was skipped and this provider costs money; DARKROOM_ALLOW_PAID_FALLBACK=true allows this",
     );
+  });
+
+  it("list_providers reports health, cost, the paid gate, and spend, without the key", async () => {
+    const port = await closedPort();
+    const c = await connect({
+      COMFYUI_URL: `http://127.0.0.1:${port}`,
+      DARKROOM_PROVIDER_ORDER: "comfyui,openai",
+      DARKROOM_OPENAI_API_KEY: FAKE_KEY,
+    });
+    const tool = (await c.listTools()).tools.find((t) => t.name === "list_providers");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+
+    const result = (await c.callTool({ name: "list_providers", arguments: {} })) as CallToolResult;
+    expect(result.isError).toBeFalsy();
+    const out = result.structuredContent as {
+      providers: { name: string; healthy: boolean | null; detail: string | null; estimated_cost_usd: { draft: number } | null }[];
+      spend: { spent_usd: number; cap_usd: number };
+    };
+    expect(out.providers.map((p) => p.name)).toEqual(["comfyui", "openai", "mock", "gemini"]);
+    const [comfyui, openai] = out.providers;
+    expect(comfyui?.healthy).toBe(false);
+    expect(comfyui?.detail).toMatch(/Can't reach ComfyUI/);
+    expect(openai?.healthy).toBe(true);
+    expect(openai?.detail).toMatch(/^Used only when asked for by name/);
+    expect(openai?.estimated_cost_usd?.draft).toBeGreaterThan(0);
+    expect(out.spend).toMatchObject({ spent_usd: 0, cap_usd: 2 });
+    expect(JSON.stringify(result)).not.toContain(FAKE_KEY);
   });
 
   it("fails at startup when DARKROOM_OPENAI_MODEL has no known prices", () => {
