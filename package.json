@@ -1,13 +1,27 @@
 {
   "name": "darkroom-mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "MCP server that gives Claude Code an image generation tool across swappable providers (local ComfyUI, OpenAI, Gemini, mock).",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "claude-code",
+    "image-generation",
+    "comfyui",
+    "openai",
+    "z-image"
+  ],
   "type": "module",
   "license": "MIT",
   "author": "Matt Nelson",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Matthew-Nelson/darkroom-mcp.git"
+  },
+  "homepage": "https://github.com/Matthew-Nelson/darkroom-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/Matthew-Nelson/darkroom-mcp/issues"
   },
   "bin": {
     "darkroom-mcp": "dist/index.js"
