@@ -61,7 +61,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 Done when (agreed with Matt, Oct 3, 2026):
 
-- [x] `npm run check` passes (352 tests); real contract suite passes against Gemini (`DARKROOM_CONTRACT_GEMINI=1`, 5 tests)
+- [x] `npm run check` passes (354 tests, after review fixes); real contract suite passes against Gemini (`DARKROOM_CONTRACT_GEMINI=1`, 5 tests)
 - [x] Same prompt and aspect ratio on mock, comfyui, openai, and gemini by changing only `provider`
 - [x] A bad key gives a clear error, $0 charged, and the key appears nowhere in the output
 - [x] With order `comfyui,gemini` and ComfyUI stopped: refused by default, falls back to Gemini only with `DARKROOM_ALLOW_PAID_FALLBACK=true`
@@ -114,6 +114,18 @@ Done when (agreed with Matt, Oct 3, 2026):
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 3, 2026 (UTC) — review of PR #10
+
+A multi-model review of `853ac2b` (opus and sonnet legs; the Gemini leg was skipped) posted 5 findings, all Low. All fixed on the branch, with a failing test first where code changed:
+
+- **A1:** `costFromUsage`'s comment said unaccounted output is billed at the image rate, but with a breakdown present the code priced it at the text rate (the intended, logged choice). Comment fixed; a breakdown with no `IMAGE` entry is now priced entirely at the image rate, like a missing one.
+- **A2:** "within 1% of list price" was wrong: Darkroom's computed costs are 2.2–2.6% over the per-image list price across the seven benchmark calls (the list price covers only image tokens), and they're Darkroom's own arithmetic, not billed amounts. The image-rate alternative is 37–59% over, not ~55%. Corrected in the code comment, README, fixtures README, and this file.
+- **A4:** every 429 told the user to turn on billing; it now says to wait, retry, or check quotas, with billing as one possible cause.
+- **A5:** SPEC's "checked on Oct 2" now notes Gemini's prices were checked again on Oct 3.
+- **B1:** the no-image error truncated the model's text before redacting it, so a key straddling the cut could leave a fragment; it now redacts first.
+
+`npm run check` passes (354 tests).
 
 ### Oct 3, 2026 (UTC) — M5 started: Gemini provider (branch `m5/gemini`)
 
