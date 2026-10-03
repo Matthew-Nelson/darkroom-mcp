@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import sharp from "sharp";
 import { z } from "zod";
-import { ConfigError, optional, outputDir, usd, type ProviderName } from "../src/config.js";
+import { ConfigError, optional, outputDir, PAID_PROVIDERS, PROVIDER_NAMES, usd, type ProviderName } from "../src/config.js";
 import { formatUsd } from "../src/ledger.js";
 import { ASPECT_RATIOS, QUALITIES, type GenerateRequest, type Quality } from "../src/providers/types.js";
 import type { Router } from "../src/router.js";
@@ -35,7 +35,7 @@ const RunKey = z.object({
   prompt_id: z.string(),
   prompt: z.string(),
   aspect_ratio: z.enum(ASPECT_RATIOS),
-  provider: z.string(),
+  provider: z.enum(PROVIDER_NAMES),
   model: z.string(),
   quality: z.enum(QUALITIES),
   created_at: z.string(),
@@ -136,6 +136,30 @@ export function findResult(
   quality: Quality,
 ): EvalResult | undefined {
   return results.findLast((r) => matches(r, p, col, quality));
+}
+
+/**
+ * The report's columns: each provider with a result for these prompts at this quality,
+ * configured now or only cached, in PROVIDER_NAMES order. So rebuilding the report
+ * in a shell with another DARKROOM_PROVIDER_ORDER never drops cached results, and a
+ * configured provider with none (e.g. skipped as unhealthy) isn't an empty column.
+ * A configured provider's model wins when it has results; otherwise the latest cached one.
+ */
+export function reportColumns(
+  configured: readonly EvalColumn[],
+  prompts: readonly EvalPrompt[],
+  quality: Quality,
+  results: readonly EvalResult[],
+): EvalColumn[] {
+  const hasResults = (col: EvalColumn) => prompts.some((p) => findResult(results, p, col, quality));
+  return PROVIDER_NAMES.flatMap((provider) => {
+    const current = configured.find((c) => c.provider === provider);
+    if (current && hasResults(current)) return [current];
+    const cached = results.findLast(
+      (r) => r.provider === provider && prompts.some((p) => matches(r, p, { provider, model: r.model, isPaid: false }, quality)),
+    );
+    return cached ? [{ provider, model: cached.model, isPaid: PAID_PROVIDERS.has(provider) }] : [];
+  });
 }
 
 /** Prompt and column pairs with no successful result yet: what a run would generate. */

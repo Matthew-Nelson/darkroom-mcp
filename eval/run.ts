@@ -12,6 +12,7 @@ import {
   loadPrompts,
   loadResults,
   pendingRuns,
+  reportColumns,
   requestFor,
   runEval,
   saveResults,
@@ -110,7 +111,8 @@ async function main(): Promise<void> {
     }
   }
 
-  const report = buildReport({ prompts, columns, quality: evalConfig.quality, results, generatedAt: new Date() });
+  const reported = reportColumns(columns, prompts, evalConfig.quality, results);
+  const report = buildReport({ prompts, columns: reported, quality: evalConfig.quality, results, generatedAt: new Date() });
   await writeFile(join(EVAL_DIR, "report.md"), report);
   say("Wrote eval/report.md");
 }

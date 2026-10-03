@@ -10,6 +10,7 @@ import {
   loadPrompts,
   loadResults,
   pendingRuns,
+  reportColumns,
   runEval,
   saveResults,
   THUMB_MAX_EDGE,
@@ -256,6 +257,30 @@ describe("buildReport", () => {
     const report = buildReport({ prompts, columns, quality: "final", results: [], generatedAt: new Date() });
     expect(report).toContain("| 0 of 2 | – | $0 (free) | $0 |");
     expect(report.match(/not run/g)).toHaveLength(2);
+  });
+});
+
+describe("reportColumns", () => {
+  it("keeps cached providers that aren't configured now, and drops configured ones with no results", async () => {
+    const { router, columns } = setup({ mock: createMockProvider(), openai: paidProvider({ estimateCostUsd: () => 0.01 }) });
+    const results = await run({ router, columns }).promise;
+    const configured: EvalColumn[] = [
+      { provider: "comfyui", model: "z-image", isPaid: false }, // e.g. skipped as unhealthy: no results
+      { provider: "mock", model: "mock-placeholder-v1", isPaid: false },
+    ];
+
+    expect(reportColumns(configured, prompts, "draft", results)).toEqual([
+      { provider: "mock", model: "mock-placeholder-v1", isPaid: false },
+      { provider: "openai", model: "gpt-test", isPaid: true },
+    ]);
+    expect(reportColumns(configured, prompts, "final", results)).toEqual([]);
+  });
+
+  it("uses the configured model when it has results, otherwise the latest cached one", async () => {
+    const { router, columns } = setup({ mock: createMockProvider() });
+    const results = await run({ router, columns }).promise;
+    const newModel: EvalColumn[] = [{ provider: "mock", model: "mock-v2", isPaid: false }];
+    expect(reportColumns(newModel, prompts, "draft", results)).toEqual(columns);
   });
 });
 
