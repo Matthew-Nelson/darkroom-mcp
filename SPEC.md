@@ -231,7 +231,7 @@ Five milestones, each ending in a commit Matt can review; the agent stops after 
 5. **M4: Ship it.** Eval run and report, README (setup for each provider, config table, architecture diagram, demo GIF of Claude generating, critiquing, and regenerating), npm publish.
    - Done when: a fresh machine can install it with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command and generate a mock image in under five minutes.
 
-**Immediately after v1:** add the second paid provider as a single, self-contained commit (the "one file plus one registry line" demo), then the Flux schnell and SDXL templates.
+**Immediately after v1:** add the second paid provider, Gemini, as a single, self-contained commit (the "one file plus one registry line" demo), then the Flux schnell and SDXL templates. Gemini gets the same cost benchmark OpenAI got in M2: real `draft` and `final` calls at a few aspect ratios through the ledger, actual cost compared with list price and with OpenAI, its estimates calibrated from the results, and the numbers added to the README's cost table and the eval report.
 
 ## Phase 2 stretch goals
 
