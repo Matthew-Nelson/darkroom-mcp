@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { ConfigError } from "../config.js";
+import { networkError, redactKey, roundUsd } from "./paid-api.js";
 import { sizeForArea, QUALITY_PIXELS } from "./sizes.js";
 import {
   ContentRefusedError,
@@ -142,7 +143,7 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
         }
         // An error status whose body couldn't be read is still that error status.
         if (res && !res.ok) throw describeHttpError(res.status, "", redact);
-        throw networkError(err, redact);
+        throw networkError("OpenAI", err, redact);
       }
       if (!res.ok) throw describeHttpError(res.status, text, redact);
 
@@ -235,30 +236,4 @@ function describeHttpError(status: number, text: string, redact: (s: string) => 
     });
   }
   return new ProviderError(`OpenAI returned a server error (HTTP ${status})${detail}. It may still have billed the request.`);
-}
-
-// Errors where the request never reached OpenAI, so it can't have been billed.
-const UNSENT_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH"]);
-
-function networkError(err: unknown, redact: (s: string) => string): ProviderError {
-  const cause = err instanceof Error && err.cause instanceof Error ? err.cause : undefined;
-  const code = cause && "code" in cause && typeof cause.code === "string" ? cause.code : undefined;
-  const reason = redact(code ?? cause?.message ?? (err instanceof Error ? err.message : String(err)));
-  const unsent = code !== undefined && UNSENT_CODES.has(code);
-  return new ProviderError(
-    `Can't reach OpenAI (${reason}).${unsent ? "" : " It may still have billed the request."}`,
-    { notCharged: unsent },
-  );
-}
-
-/** Removes the API key, and anything shaped like an OpenAI key, from text bound for logs or Claude. */
-export function redactKey(text: string, apiKey: string | undefined): string {
-  // A very short "key" would mangle ordinary text; real keys are far longer.
-  let out = apiKey && apiKey.length >= 8 ? text.split(apiKey).join("[redacted]") : text;
-  out = out.replace(/sk-[A-Za-z0-9_*-]{8,}/g, "sk-[redacted]");
-  return out;
-}
-
-function roundUsd(usd: number): number {
-  return Math.round(usd * 1e6) / 1e6;
 }

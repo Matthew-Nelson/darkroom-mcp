@@ -8,8 +8,8 @@ import {
   MIN_PIXELS,
   OPENAI_RATES,
   openaiSize,
-  redactKey,
 } from "../../src/providers/openai.js";
+import { redactKey } from "../../src/providers/paid-api.js";
 import {
   ASPECT_RATIOS,
   ContentRefusedError,
