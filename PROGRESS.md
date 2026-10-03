@@ -1,6 +1,6 @@
 # Progress
 
-## Current: v1 complete (M4 tagged `m4`) · Phase 2 not started
+## Current: M5 (Gemini provider) in progress
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -11,6 +11,7 @@
 | M2: Ledger + first paid provider | done | `m2` |
 | M3: Router and guardrails | done | `m3` |
 | M4: Ship it | done | `m4` |
+| M5: Gemini provider | in progress | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
 
@@ -56,9 +57,22 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] Matt approved and merged PR #8 (after a multi-model review; all 11 findings fixed)
 - [x] Tagged `m4`
 
+## M5 gates
+
+Done when (agreed with Matt, Oct 3, 2026):
+
+- [x] `npm run check` passes (347 tests)
+- [ ] Same prompt and aspect ratio on mock, comfyui, openai, and gemini by changing only `provider`
+- [ ] A bad key gives a clear error, $0 charged, and the key appears nowhere in the output
+- [ ] With order `comfyui,gemini` and ComfyUI stopped: refused by default, falls back to Gemini only with `DARKROOM_ALLOW_PAID_FALLBACK=true`
+- [ ] A Gemini request over the cap is refused
+- [ ] Cost benchmark and eval recorded; costs compared with list price and OpenAI; estimates calibrated
+- [ ] Matt approved and merged the PR
+- [ ] Tagged `m5`
+
 ## Next up
 
-- v1 is done. Phase 2 (and the deferred demo GIF or an npm publish) waits for Matt's go-ahead.
+- M5 commits 1–4 are built and tested offline (helpers, config, provider, real contract run). Next: Matt creates a Gemini API key with billing on, then the real contract run, cost benchmark (including whether `seed` repeats an image), acceptance runs, eval, and docs. Agreed spend budget: $1.50.
 
 ## Deviations from spec
 
@@ -93,6 +107,14 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 3, 2026 (UTC) — M5 started: Gemini provider (branch `m5/gemini`)
+
+Matt approved the plan: Gemini as M5, default model `gemini-3.1-flash-image`, spend budget $1.50. The key comes later.
+
+Docs checked today: Gemini pricing (unchanged from the spec: $0.50/M input, $60/M image output, $3/M text and thinking output; 747 tokens at 512px, 1,120 at 1K; no free tier), the image generation guide, and the `generateContent` API reference (`imageConfig.aspectRatio` and `imageSize` of `512`/`1K`, `responseModalities`, `usageMetadata` with per-modality counts and `thoughtsTokenCount`, `promptFeedback.blockReason`, image `finishReason`s, `thought` parts). Google now points new projects at the beta Interactions API; Darkroom uses `generateContent`, which Google recommends for stable deployments and which doesn't store requests.
+
+Built so far (offline): shared paid-API helpers, `DARKROOM_GEMINI_MODEL` and `DARKROOM_GEMINI_TIMEOUT_MS`, the `gemini` provider with unit tests and the offline contract suite, and `DARKROOM_CONTRACT_GEMINI=1`. Smoke test over stdio with order `gemini,mock` and only a generic `GEMINI_API_KEY` set: `list_providers` reports Gemini unhealthy with the "not set" detail, and a request names the missing `DARKROOM_GEMINI_API_KEY`.
 
 ### Oct 3, 2026 (UTC) — eval path validation (after `m4`)
 
