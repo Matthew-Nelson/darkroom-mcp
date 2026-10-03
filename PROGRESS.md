@@ -49,7 +49,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Next up
 
-- Matt reviews the M3 PR (branch `m3/router-guardrails`). Once he approves, add the "Mark M3 done" commit; after he merges, tag `m3`.
+- Matt reviews the M3 PR, [#7](https://github.com/Matthew-Nelson/darkroom-mcp/pull/7) (branch `m3/router-guardrails`). Once he approves, add the "Mark M3 done" commit; after he merges, tag `m3`.
 - Then M4 (eval, README polish and demo GIF, npm publish), after Matt's go-ahead.
 
 ## Deviations from spec
