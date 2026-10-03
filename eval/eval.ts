@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import sharp from "sharp";
@@ -8,7 +8,7 @@ import { ConfigError, optional, outputDir, PAID_PROVIDERS, PROVIDER_NAMES, usd, 
 import { formatUsd } from "../src/ledger.js";
 import { ASPECT_RATIOS, QUALITIES, type GenerateRequest, type Quality } from "../src/providers/types.js";
 import type { Router } from "../src/router.js";
-import { isErrno, type Storage } from "../src/storage.js";
+import { isErrno, rescuePng, type SavedImage, type Storage } from "../src/storage.js";
 
 // The eval: a fixed set of prompts run against every enabled provider, for a person
 // to compare side by side (no automatic scoring). Paid calls go through the real
@@ -205,10 +205,12 @@ export interface RunOptions {
  * Generates every pending prompt and column pair, one at a time (ComfyUI runs one
  * job at a time anyway), saving results after each so an interrupted run keeps what
  * it finished. A failure is recorded and retried on the next run. Stops at once
- * when `signal` aborts, without recording the cancelled request.
+ * when `signal` aborts, without recording the cancelled request. First rebuilds
+ * any missing thumbnail whose full-size image is still in the output directory.
  */
 export async function runEval(o: RunOptions): Promise<EvalResult[]> {
   const results = [...o.results];
+  await repairThumbnails(results, o);
   const pending = pendingRuns(o.prompts, o.columns, o.quality, results);
   for (const [i, { prompt, column }] of pending.entries()) {
     o.say(`[${i + 1}/${pending.length}] ${column.provider}: ${prompt.id}`);
@@ -243,18 +245,35 @@ export async function runEval(o: RunOptions): Promise<EvalResult[]> {
         cost_usd: routed.result.actualCostUsd ?? routed.provider.estimateCostUsd(req),
         cost_is_estimate: routed.result.actualCostUsd === undefined,
       };
-      // Same sidecar shape as generate_image, so list_images can read the eval folder too.
-      const saved = await o.storage.save(`${prompt.id}-${column.provider}`, routed.result.png, {
-        version: 1,
-        created_at: key.created_at,
-        request: { prompt: prompt.prompt, aspect_ratio: prompt.aspect_ratio, quality: o.quality, provider: column.provider },
-        ...facts,
-        ignored_params: [],
-        skipped_providers: routed.skipped,
-        eval_prompt_id: prompt.id,
-      });
+      const name = `${prompt.id}-${column.provider}`;
+      let saved: SavedImage;
+      try {
+        // Same sidecar shape as generate_image, so list_images can read the eval folder too.
+        saved = await o.storage.save(name, routed.result.png, {
+          version: 1,
+          created_at: key.created_at,
+          request: { prompt: prompt.prompt, aspect_ratio: prompt.aspect_ratio, quality: o.quality, provider: column.provider },
+          ...facts,
+          ignored_params: [],
+          skipped_providers: routed.skipped,
+          eval_prompt_id: prompt.id,
+        });
+      } catch (err) {
+        // The image may have been paid for: never drop it on the floor.
+        const reason = err instanceof Error ? err.message : String(err);
+        const kept = await rescuePng(routed.result.png, name).then(
+          (path) => `The image was kept at ${path}.`,
+          (e: unknown) => `Keeping a copy in the temp folder failed too (${e instanceof Error ? e.message : String(e)}).`,
+        );
+        throw new Error(`Generated (${formatCost(facts)}), but couldn't save it to ${o.storage.root} (${reason}). ${kept}`, {
+          cause: err,
+        });
+      }
       const thumb = thumbPath(prompt, column, o.quality);
-      await writeThumbnail(routed.result.png, join(o.reportDir, thumb));
+      // The image is saved, so a thumbnail failure doesn't fail the result: the next run rebuilds it.
+      await writeThumbnail(routed.result.png, join(o.reportDir, thumb)).catch((err: unknown) => {
+        o.say(`    couldn't write the thumbnail (${err instanceof Error ? err.message : String(err)}); the next run retries`);
+      });
       // The record keeps the model it's cached under (the provider's declared model);
       // the sidecar above keeps the one the provider reported.
       result = { ...key, ...facts, model: column.model, ok: true, image: basename(saved.pngPath), thumb };
@@ -272,6 +291,30 @@ export async function runEval(o: RunOptions): Promise<EvalResult[]> {
   }
   return results;
 }
+
+async function repairThumbnails(results: readonly EvalResult[], o: RunOptions): Promise<void> {
+  for (const r of results) {
+    if (!r.ok) continue;
+    const thumb = join(o.reportDir, r.thumb);
+    if (await exists(thumb)) continue;
+    const image = join(o.storage.root, r.image);
+    if (!(await exists(image))) continue;
+    await writeThumbnail(await readFile(image), thumb).then(
+      () => {
+        o.say(`Rebuilt the missing thumbnail ${r.thumb}`);
+      },
+      (err: unknown) => {
+        o.say(`Couldn't rebuild the thumbnail ${r.thumb} (${err instanceof Error ? err.message : String(err)})`);
+      },
+    );
+  }
+}
+
+const exists = (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
 
 async function writeThumbnail(png: Buffer, path: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });

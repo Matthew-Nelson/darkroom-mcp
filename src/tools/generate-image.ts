@@ -1,7 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { CallToolResult, ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -16,7 +12,7 @@ import {
   type ProgressListener,
 } from "../providers/types.js";
 import { NoProviderError, type Router } from "../router.js";
-import { makePreview, slugify, type SavedImage, type Storage } from "../storage.js";
+import { makePreview, rescuePng, type SavedImage, type Storage } from "../storage.js";
 
 export const MAX_PROMPT_LENGTH = 4000;
 export const HEARTBEAT_MS = 5000;
@@ -224,9 +220,8 @@ async function rescueResult(
   outputDir: string,
 ): Promise<CallToolResult> {
   const reason = err instanceof Error ? err.message : String(err);
-  const path = join(tmpdir(), `darkroom-rescue-${slugify(name)}-${randomBytes(4).toString("hex")}.png`);
-  const kept = await writeFile(path, png, { flag: "wx" }).then(
-    () => `The image was kept at ${path} instead.`,
+  const kept = await rescuePng(png, name).then(
+    (path) => `The image was kept at ${path} instead.`,
     (e: unknown) => `Keeping a copy in the temp folder failed too (${e instanceof Error ? e.message : String(e)}).`,
   );
   const text = `Generated an image with ${facts.provider} (${formatCost(facts)}), but couldn't save it to ${outputDir} (${reason}). ${kept}`;

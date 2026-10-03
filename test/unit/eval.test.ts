@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -172,6 +172,35 @@ describe("runEval", () => {
     const second = await run({ router, columns, results: first }).promise;
     expect(generate).toHaveBeenCalledTimes(3);
     expect(second.at(-1)).toMatchObject({ prompt_id: "sign", ok: true });
+  });
+
+  it("keeps a paid image when its thumbnail can't be written, and rebuilds the thumbnail next run", async () => {
+    await mkdir(reportDir, { recursive: true });
+    await writeFile(join(reportDir, "thumbs"), "not a folder");
+    const openai = paidProvider({ estimateCostUsd: () => 0.01 });
+    const { router, columns } = setup({ openai });
+    const first = await run({ router, columns, ps: prompts.slice(0, 1) }).promise;
+    const [result] = first;
+    if (!result?.ok) throw new Error("expected a success");
+    expect(await readdir(storage.root)).toContain(result.image);
+
+    await rm(join(reportDir, "thumbs"));
+    const second = await run({ router, columns, results: first, ps: prompts.slice(0, 1) }).promise;
+    expect(openai.generate).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+    expect((await sharp(join(reportDir, result.thumb)).metadata()).format).toBe("jpeg");
+  });
+
+  it("keeps a paid image in the temp folder when it can't be saved, and says where", async () => {
+    const openai = paidProvider({ estimateCostUsd: () => 0.01 });
+    const { router, columns } = setup({ openai });
+    vi.spyOn(storage, "save").mockRejectedValueOnce(new Error("disk full"));
+    const [result] = await run({ router, columns, ps: prompts.slice(0, 1) }).promise;
+    if (!result || result.ok) throw new Error("expected a failure");
+    expect(result.error).toMatch(/couldn't save it .*disk full.*kept at (\S+\.png)/);
+    const rescued = /kept at (\S+\.png)/.exec(result.error)?.[1] ?? "";
+    expect((await sharp(rescued).metadata()).format).toBe("png");
+    await rm(rescued);
   });
 
   it("stops paid calls at the eval budget, in a ledger of its own", async () => {
