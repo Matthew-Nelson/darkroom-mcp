@@ -20,7 +20,7 @@ import {
 import { ConfigError, loadConfig, type ProviderName } from "../../src/config.js";
 import { Ledger } from "../../src/ledger.js";
 import { createMockProvider } from "../../src/providers/mock.js";
-import type { ImageProvider } from "../../src/providers/types.js";
+import type { ImageProvider, Quality } from "../../src/providers/types.js";
 import { Router } from "../../src/router.js";
 import { Storage } from "../../src/storage.js";
 
@@ -68,12 +68,19 @@ function setup(providers: Partial<Record<ProviderName, ImageProvider>>, budgetUs
   return { router, columns };
 }
 
-function run(o: { router: Router; columns: EvalColumn[]; results?: EvalResult[]; signal?: AbortSignal; ps?: EvalPrompt[] }) {
+function run(o: {
+  router: Router;
+  columns: EvalColumn[];
+  results?: EvalResult[];
+  signal?: AbortSignal;
+  ps?: EvalPrompt[];
+  quality?: Quality;
+}) {
   const save = vi.fn<(results: EvalResult[]) => Promise<void>>(() => Promise.resolve());
   const promise = runEval({
     prompts: o.ps ?? prompts,
     columns: o.columns,
-    quality: "draft",
+    quality: o.quality ?? "draft",
     router: o.router,
     storage,
     reportDir,
@@ -120,7 +127,7 @@ describe("runEval", () => {
     const [first] = results;
     if (!first?.ok) throw new Error("expected a success");
     expect(first).toMatchObject({ prompt_id: "sign", provider: "mock", model: "mock-placeholder-v1", width: 624, height: 416 });
-    expect(first.thumb).toBe("thumbs/sign--mock.jpg");
+    expect(first.thumb).toMatch(/^thumbs\/sign--mock--draft-[0-9a-f]{8}\.jpg$/);
     const thumb = await sharp(join(reportDir, first.thumb)).metadata();
     expect(thumb.format).toBe("jpeg");
     expect(Math.max(thumb.width, thumb.height)).toBe(THUMB_MAX_EDGE);
@@ -192,6 +199,27 @@ describe("runEval", () => {
   });
 });
 
+describe("thumbnails", () => {
+  it("are named per quality and model, so another run never overwrites a committed one", async () => {
+    const { router, columns } = setup({ mock: createMockProvider() });
+    const finals = await run({ router, columns, quality: "final" }).promise;
+    const [final] = finals;
+    if (!final?.ok) throw new Error("expected a success");
+    const before = await readFile(join(reportDir, final.thumb));
+
+    const drafts = await run({ router, columns, results: finals, quality: "draft" }).promise;
+    const otherModel = await run({
+      router,
+      columns: columns.map((c) => ({ ...c, model: "mock-v2" })),
+      results: drafts,
+      quality: "final",
+    }).promise;
+    const thumbs = otherModel.filter((r) => r.ok && r.prompt_id === "sign").map((r) => (r.ok ? r.thumb : ""));
+    expect(new Set(thumbs).size).toBe(3);
+    expect(await readFile(join(reportDir, final.thumb))).toEqual(before);
+  });
+});
+
 describe("results file", () => {
   it("round-trips, and a missing file means no results", async () => {
     const path = join(dir, "results.json");
@@ -214,7 +242,7 @@ describe("buildReport", () => {
     expect(report).toMatch(/\| `mock` \| `mock-placeholder-v1` \| 2 of 2 \| [\d.]+s \| \$0 \(free\) \| \$0 \|/);
     expect(report).toContain("| `openai` | `gpt-test` | 0 of 2 | – | $0.00 | – |");
     expect(report).toContain("| Prompt | `mock` | `openai` |");
-    expect(report).toContain('<img src="thumbs/sign--mock.jpg" width="240" alt="mock: a sign that reads OPEN"><br><sub>624×416');
+    expect(report).toMatch(/<img src="thumbs\/sign--mock--draft-[0-9a-f]{8}\.jpg" width="240" alt="mock: a sign that reads OPEN"><br><sub>624×416/);
     expect(report).toContain("a flat app icon &#124; with a pipe");
     expect(report).toContain("failed: boom &#124; bad");
     // Every grid row has one cell per column, so no stray pipes split a cell.

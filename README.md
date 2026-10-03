@@ -176,9 +176,9 @@ Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidec
 
 | Prompt | `comfyui` | `openai` |
 | --- | --- | --- |
-| a glass jar of honey with a kraft paper label that reads WILD CLOVER | <img src="eval/thumbs/honey-jar--comfyui.jpg" width="240" alt="Z-Image: honey jar with a white WILD CLOVER label and Kraft printed on the lid"> | <img src="eval/thumbs/honey-jar--openai.jpg" width="240" alt="OpenAI: honey jar with a kraft paper WILD CLOVER label"> |
-| a vintage film camera taken apart, its parts laid out neatly in rows on a green cutting mat | <img src="eval/thumbs/camera-knolling--comfyui.jpg" width="240" alt="Z-Image: three whole cameras above rows of lenses and rings"> | <img src="eval/thumbs/camera-knolling--openai.jpg" width="240" alt="OpenAI: a camera disassembled into rows of parts"> |
-| a flat app icon of a camera aperture, rounded square, purple-to-orange gradient | <img src="eval/thumbs/aperture-icon--comfyui.jpg" width="240" alt="Z-Image: a camera lens icon"> | <img src="eval/thumbs/aperture-icon--openai.jpg" width="240" alt="OpenAI: an aperture-blade icon"> |
+| a glass jar of honey with a kraft paper label that reads WILD CLOVER | <img src="eval/thumbs/honey-jar--comfyui--final-57d3b9e2.jpg" width="240" alt="Z-Image: honey jar with a white WILD CLOVER label and Kraft printed on the lid"> | <img src="eval/thumbs/honey-jar--openai--final-7cb55a4e.jpg" width="240" alt="OpenAI: honey jar with a kraft paper WILD CLOVER label"> |
+| a vintage film camera taken apart, its parts laid out neatly in rows on a green cutting mat | <img src="eval/thumbs/camera-knolling--comfyui--final-fa67c151.jpg" width="240" alt="Z-Image: three whole cameras above rows of lenses and rings"> | <img src="eval/thumbs/camera-knolling--openai--final-bfb46c40.jpg" width="240" alt="OpenAI: a camera disassembled into rows of parts"> |
+| a flat app icon of a camera aperture, rounded square, purple-to-orange gradient | <img src="eval/thumbs/aperture-icon--comfyui--final-cbf77d58.jpg" width="240" alt="Z-Image: a camera lens icon"> | <img src="eval/thumbs/aperture-icon--openai--final-b64bbbd8.jpg" width="240" alt="OpenAI: an aperture-blade icon"> |
 
 What the grid shows:
 

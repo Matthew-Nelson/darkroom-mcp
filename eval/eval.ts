@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -149,6 +150,16 @@ export function pendingRuns(
   );
 }
 
+/**
+ * Where a result's thumbnail goes, relative to eval/. Unique per cache key (a hash
+ * covers the model, aspect ratio, and prompt text), so a draft run or a run on
+ * another model never overwrites the committed thumbnails the README shows.
+ */
+export function thumbPath(p: EvalPrompt, col: EvalColumn, quality: Quality): string {
+  const hash = createHash("sha256").update([col.model, p.aspect_ratio, p.prompt].join("\0")).digest("hex").slice(0, 8);
+  return `thumbs/${p.id}--${col.provider}--${quality}-${hash}.jpg`;
+}
+
 export function requestFor(p: EvalPrompt, quality: Quality): GenerateRequest {
   return { prompt: p.prompt, aspectRatio: p.aspect_ratio, quality };
 }
@@ -218,9 +229,11 @@ export async function runEval(o: RunOptions): Promise<EvalResult[]> {
         skipped_providers: routed.skipped,
         eval_prompt_id: prompt.id,
       });
-      const thumb = `thumbs/${prompt.id}--${column.provider}.jpg`;
+      const thumb = thumbPath(prompt, column, o.quality);
       await writeThumbnail(routed.result.png, join(o.reportDir, thumb));
-      result = { ...key, ...facts, ok: true, image: basename(saved.pngPath), thumb };
+      // The record keeps the model it's cached under (the provider's declared model);
+      // the sidecar above keeps the one the provider reported.
+      result = { ...key, ...facts, model: column.model, ok: true, image: basename(saved.pngPath), thumb };
       o.say(`    ${facts.width}×${facts.height}, ${formatSeconds(latencyMs)}, ${formatCost(facts)}`);
     } catch (err) {
       if (o.signal.aborted) break;
