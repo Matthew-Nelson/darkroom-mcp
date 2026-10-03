@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M5 (Gemini provider) in progress
+## Current: M5 (Gemini provider) awaiting review
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -11,7 +11,7 @@
 | M2: Ledger + first paid provider | done | `m2` |
 | M3: Router and guardrails | done | `m3` |
 | M4: Ship it | done | `m4` |
-| M5: Gemini provider | in progress | — |
+| M5: Gemini provider | awaiting review | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
 
@@ -61,20 +61,27 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 Done when (agreed with Matt, Oct 3, 2026):
 
-- [x] `npm run check` passes (347 tests)
-- [ ] Same prompt and aspect ratio on mock, comfyui, openai, and gemini by changing only `provider`
-- [ ] A bad key gives a clear error, $0 charged, and the key appears nowhere in the output
-- [ ] With order `comfyui,gemini` and ComfyUI stopped: refused by default, falls back to Gemini only with `DARKROOM_ALLOW_PAID_FALLBACK=true`
-- [ ] A Gemini request over the cap is refused
-- [ ] Cost benchmark and eval recorded; costs compared with list price and OpenAI; estimates calibrated
+- [x] `npm run check` passes (352 tests); real contract suite passes against Gemini (`DARKROOM_CONTRACT_GEMINI=1`, 5 tests)
+- [x] Same prompt and aspect ratio on mock, comfyui, openai, and gemini by changing only `provider`
+- [x] A bad key gives a clear error, $0 charged, and the key appears nowhere in the output
+- [x] With order `comfyui,gemini` and ComfyUI stopped: refused by default, falls back to Gemini only with `DARKROOM_ALLOW_PAID_FALLBACK=true`
+- [x] A Gemini request over the cap is refused
+- [x] Cost benchmark and eval recorded; costs compared with list price and OpenAI; estimates calibrated
 - [ ] Matt approved and merged the PR
 - [ ] Tagged `m5`
 
 ## Next up
 
-- Provider built, contract-tested against the real API, benchmarked, and calibrated. Next: acceptance runs (four providers, bad key, fallback, cap), the eval's Gemini column, and docs (README, SPEC, deviations), then the PR. Spent so far about $0.44 of the $1.50 budget.
+- M5 is built, accepted, and documented; the PR awaits Matt's review. After approval: the "Mark M5 done" commit, then tag `m5` once merged.
+- Check Google's billing report for Oct 3 (UTC) once it updates: it should show about $1.22. Much more would mean the unlabeled output tokens are billed at the image rate (see the M5 log).
 
 ## Deviations from spec
+
+- **Gemini became M5, in several commits** (Oct 3, 2026). SPEC planned it as one self-contained commit. The provider is still one new file plus one registry line, but it came with a shared-helpers refactor (`src/providers/paid-api.ts`), two config variables (`DARKROOM_GEMINI_MODEL`, `DARKROOM_GEMINI_TIMEOUT_MS`), and benchmark calibration as separate commits. SPEC.md updated.
+- **Gemini is the pricier paid provider** (M5). A Gemini `draft` ($0.046) costs more than an OpenAI square `final` ($0.0133); a Gemini `final` ($0.0685) costs about 5× as much. It's documented as the second paid option, not a cheaper one.
+- **Gemini supports `seed`, approximately** (M5). The benchmark showed the same seed keeps the composition (slightly reframed) and carries from a 512px draft to a 1K final, so `supports.seed` is true. Its seed is a 32-bit signed integer; larger seeds are refused before sending, uncharged.
+- **`generateContent`, not the Interactions API** (M5). Google now steers new projects to the beta Interactions API, but recommends `generateContent` for stable deployments, and Interactions stores requests by default.
+- **Gemini's unlabeled output tokens are billed at the text rate** (M5). Each response reported 414–482 output tokens beyond the `IMAGE` count, with no modality and no `thoughtsTokenCount`. Darkroom prices them at the $3/M text and thinking rate, which matches list price within 1%; this is to be confirmed against Google's billing report.
 
 - **No demo GIF in v1** (Matt, Oct 3, 2026). SPEC's M4 lists a README GIF of Claude generating, critiquing, and regenerating. Skipped for now; the README's visuals are the eval thumbnails. It can be added later as its own `docs/` PR (record the terminal, then trim and convert with ffmpeg).
 - **No npm publish in M4** (Matt, Oct 3, 2026: the repo stays private, and publishing is undecided). The acceptance test ran against the packed tarball instead (`npm pack`, then `claude mcp add ... -- npx -y -p <tgz> darkroom-mcp` with an empty npm cache), which exercises the same install path. Publishing later is `npm publish` plus swapping the README's command for `npx -y darkroom-mcp`. License: MIT.
@@ -138,6 +145,28 @@ Ledger: $0.229446. All four spelled "DARKROOM" correctly, drafts included. Unlik
 - Benchmark images: `~/.darkroom/benchmark-m5/`.
 
 **Spend so far:** about $0.44 ($0.048 contract run + $0.229 benchmark + $0.160 seed test), of the agreed $1.50.
+
+**Acceptance run** (built `dist/`; each case a fresh headless `claude -p` with `--strict-mcp-config`, a scratch MCP config, and only Darkroom tools allowed; keys from the Keychain through the environment only):
+
+1. **Same prompt, four providers** (order `mock,comfyui,openai,gemini`, ComfyUI started for this run): "a lighthouse on a rocky cliff at dusk, a small sign at the gate reads DARKROOM", 3:2 draft, only `provider` changed.
+
+   | provider | model | size | latency | cost | seed |
+   | --- | --- | --- | --- | --- | --- |
+   | mock | mock-placeholder-v1 | 624×416 | 45 ms | $0 | 2940341155 |
+   | comfyui | z-image-turbo-q4_k_m | 624×416 | 117 s | $0 | 423544248 |
+   | openai | gpt-image-2.5-flare | 992×672 | 9.2 s | $0.00366 | null |
+   | gemini | gemini-3.1-flash-image | 624×416 | 8.3 s | $0.045976 | 1583946297 |
+
+   From the previews, Claude read "DARKROOM" on all three real providers' signs. Nothing skipped, nothing ignored. **Pass.**
+2. **Bad key** (order `gemini`, an `AIza`-shaped fake key): Claude quoted `Image generation failed: Gemini rejected the API key (HTTP 400). Check DARKROOM_GEMINI_API_KEY: API key not valid. Please pass a valid API key.` The fake key appeared nowhere in the output. The ledger got one entry, `released` at $0 with the same (redacted) note. **Pass.**
+3. **Fallback** (ComfyUI stopped, order `comfyui,gemini`, no `provider`): by default, `No image provider could take this request (comfyui: unhealthy: Can't reach ComfyUI at http://127.0.0.1:8188 (ECONNREFUSED). … ; gemini: not used because comfyui was skipped and this provider costs money; DARKROOM_ALLOW_PAID_FALLBACK=true allows this).` Ledger byte-for-byte unchanged. With `DARKROOM_ALLOW_PAID_FALLBACK=true`: generated on gemini, 512×512, $0.0464, `skipped_providers` naming comfyui as unhealthy. **Pass.**
+4. **Over the cap** (order `gemini`, `DARKROOM_DAILY_CAP_USD=0.05`, `provider: "gemini"`): `No image provider could take this request (gemini: daily spend cap reached: $0.1064 of $0.05 already spent or reserved today (UTC), and this request needs about $0.0466. …)`. Ledger byte-for-byte unchanged. **Pass.**
+
+**Eval:** `DARKROOM_PROVIDER_ORDER=gemini DARKROOM_EVAL_BUDGET_USD=1 npm run eval -- --yes` (the default $0.50 budget covers only seven Gemini finals): 10 of 10, median 9.5 s, $0.6854 in total. Sizes: 1264×848 at 3:2, 848×1264 at 2:3, 1376×768 at 16:9. Gemini spelled all three test phrases correctly and followed the detailed instructions (an aperture icon, a camera taken apart), but added text nobody asked for: an invented venue, date, and ticket details on the "minimalist" poster, "RAW HONEY" on the jar, and shop names beside the bakery sign and cafe. The README's comparison now has a Gemini column and a cost table across providers (Matt asked for both mid-M5).
+
+**Process slip:** one commit chain used `;` instead of `&&`, so two commits were made while `npm run check` failed (a test pinned the committed eval at 20 results; it now has 30). Caught before pushing: the eval commit was amended with the test update, and the other commit was checked on its own in a temporary worktree (352 passed).
+
+**Total M5 spend:** Gemini about $1.22 (contract run $0.048, benchmark $0.229, seed tests $0.161, acceptance $0.092, eval $0.685), plus $0.0037 for OpenAI in acceptance run 1. Within the agreed $1.50.
 
 ### Oct 3, 2026 (UTC) — eval path validation (after `m4`)
 
