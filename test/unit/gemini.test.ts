@@ -217,6 +217,14 @@ describe("gemini provider", () => {
     expect((err as ProviderError).notCharged).toBe(false);
   });
 
+  it("redacts the key from the model's text before cutting it short", async () => {
+    // The key starts 10 characters before the 300-character cut, too little for any key pattern to match.
+    const parts = [{ text: `${"x".repeat(289)} ${KEY} and more` }];
+    const err = await failure(provider(fakeFetch(candidate(parts)).fetch).generate(request, signal));
+    expect(err.message).toContain("[redacted"); // the marker itself may be cut short
+    expect(err.message).not.toContain("AIza");
+  });
+
   it("names a NO_IMAGE finish", async () => {
     const err = await failure(provider(fakeFetch(candidate([], "NO_IMAGE")).fetch).generate(request, signal));
     expect(err.message).toBe("Gemini's response had no image in it (NO_IMAGE).");

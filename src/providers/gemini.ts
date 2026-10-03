@@ -198,7 +198,7 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
           .trim();
         const why = finishReason && finishReason !== "STOP" ? ` (${finishReason})` : "";
         throw new ProviderError(
-          `Gemini's response had no image in it${why}${said ? `. It said: "${redact(truncate(said, 300))}"` : "."}`,
+          `Gemini's response had no image in it${why}${said ? `. It said: "${truncate(redact(said), 300)}"` : "."}`,
         );
       }
 
