@@ -86,15 +86,23 @@ async function main(): Promise<void> {
     if (pending.length === 0) {
       say("Nothing to generate: every prompt has a cached result.");
     } else if (estimateUsd > 0 && !args.includes("--yes")) {
-      say(`This run costs money (an estimated ${formatUsd(estimateUsd)}; actual costs can differ). Rerun with \`npm run eval -- --yes\` to go ahead.`);
+      say(
+        `This run costs money (an estimated ${formatUsd(estimateUsd)}; actual costs can differ). ` +
+          "Rerun with `npm run eval -- --yes` to go ahead.",
+      );
       process.exitCode = 1;
       return;
     } else {
       const controller = new AbortController();
-      process.once("SIGINT", () => {
+      // Stays registered for the whole run: Ctrl+C reaches npm, tsx, and this process,
+      // and tsx forwards it again, so a second SIGINT with no listener would kill the
+      // process before the provider's cancel (e.g. ComfyUI's interrupt) is sent.
+      const onSigint = () => {
+        if (controller.signal.aborted) return;
         say("Cancelling the current request…");
         controller.abort();
-      });
+      };
+      process.on("SIGINT", onSigint);
       results = await runEval({
         prompts,
         columns: runnable,
@@ -106,8 +114,14 @@ async function main(): Promise<void> {
         save: (r) => saveResults(RESULTS_PATH, r),
         signal: controller.signal,
         say,
-      });
+      }).finally(() => process.off("SIGINT", onSigint));
       say(`Eval spend today: ${formatUsd(await ledger.spentTodayUsd())} of ${formatUsd(evalConfig.budgetUsd)}.`);
+      if (controller.signal.aborted) {
+        // A partial run isn't a success, and the committed report stays as it was.
+        say("Cancelled. Finished results are saved: rerun to continue, or use --report to rebuild the report.");
+        process.exitCode = 130;
+        return;
+      }
     }
   }
 
