@@ -26,12 +26,12 @@ providerContract(
   { cases: ALL_SHAPES },
 );
 
-// Gemini picks sizes from the aspect ratio and tier. 1:1 and 16:9 are sizes seen in the
-// M5 benchmark (and 3:2 at half size); the rest are assumed by symmetry.
+// Gemini picks sizes from the aspect ratio and tier: these are the 1K sizes seen in the M5
+// benchmark and eval. Drafts are about half each side (512×512, 624×416).
 const GEMINI_SIDES: Record<string, [number, number]> = {
   "1:1": [1024, 1024],
-  "3:2": [1248, 832],
-  "2:3": [832, 1248],
+  "3:2": [1264, 848],
+  "2:3": [848, 1264],
   "16:9": [1376, 768],
   "9:16": [768, 1376],
 };
