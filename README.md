@@ -50,7 +50,7 @@ From an empty npm cache this took 19 seconds from `claude mcp add` to Claude des
 
 ## Local generation (ComfyUI + Z-Image Turbo)
 
-The default provider runs [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) on your own machine through [ComfyUI](https://github.com/Comfy-Org/ComfyUI): free, private, and slow. On a 16GB Apple M3, a `draft` takes about 1.5 minutes and a `final` about 3.5 minutes. **16GB of memory is the practical minimum**; generation peaks around 11–12GB, so close other heavy apps.
+The default provider runs [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) on your own machine through [ComfyUI](https://github.com/Comfy-Org/ComfyUI): free, private, and slow. On a 16GB Apple M3, a `draft` takes about 1.5 minutes and a `final` 3.5 to 4 minutes (the eval's ten finals took 3m 50s to 4m 22s each). **16GB of memory is the practical minimum**; generation peaks around 11–12GB, so close other heavy apps.
 
 1. Install ComfyUI (a Python 3.12 venv works well; very new Python releases may not have PyTorch builds yet).
 2. Install the [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) custom node into `ComfyUI/custom_nodes` (the full-size weights don't fit in 16GB; the GGUF builds do).
@@ -165,6 +165,28 @@ No inputs; read-only, and never generates or spends anything. Returns the config
 
 Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, and cost. Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be read or parsed, or their PNG is gone. A broken sidecar or a missing PNG is skipped quietly; any other read error (permissions, for example) is also logged to stderr. The PNG path always comes from the sidecar's file name, never from its contents.
 
+## Comparison: local vs. OpenAI
+
+`npm run eval` ran ten fixed prompts (text, people, objects, an icon, scenes) through both providers at `final` quality on Oct 3, 2026. The full grid is in [`eval/report.md`](eval/report.md).
+
+| Provider | Model | Median latency | Cost for 10 |
+| --- | --- | --- | --- |
+| `comfyui` (16GB M3) | Z-Image Turbo, Q4_K_M GGUF | 4m 06s (3m 50s to 4m 22s) | $0 |
+| `openai` | `gpt-image-2.5-flare`, `medium` | 9.2s | $0.10 |
+
+| Prompt | `comfyui` | `openai` |
+| --- | --- | --- |
+| a glass jar of honey with a kraft paper label that reads WILD CLOVER | <img src="eval/thumbs/honey-jar--comfyui.jpg" width="240" alt="Z-Image: honey jar with a white WILD CLOVER label and Kraft printed on the lid"> | <img src="eval/thumbs/honey-jar--openai.jpg" width="240" alt="OpenAI: honey jar with a kraft paper WILD CLOVER label"> |
+| a vintage film camera taken apart, its parts laid out neatly in rows on a green cutting mat | <img src="eval/thumbs/camera-knolling--comfyui.jpg" width="240" alt="Z-Image: three whole cameras above rows of lenses and rings"> | <img src="eval/thumbs/camera-knolling--openai.jpg" width="240" alt="OpenAI: a camera disassembled into rows of parts"> |
+| a flat app icon of a camera aperture, rounded square, purple-to-orange gradient | <img src="eval/thumbs/aperture-icon--comfyui.jpg" width="240" alt="Z-Image: a camera lens icon"> | <img src="eval/thumbs/aperture-icon--openai.jpg" width="240" alt="OpenAI: an aperture-blade icon"> |
+
+What the grid shows:
+
+- **Text:** both spelled all three test phrases correctly at `final` (FRESH BREAD DAILY, NIGHT SHIFT, WILD CLOVER). At `draft` size Z-Image has misspelled words before, so render text at `final` locally.
+- **Photos:** portraits, the cafe scene, the forest road, and the rainy street are convincing from both. OpenAI's are more dramatic (a sunrise, saturated neon); Z-Image's are plainer and closer to a literal reading.
+- **Following detailed instructions** is where they differ. Z-Image drew a camera lens instead of an aperture, laid out whole cameras instead of a camera taken apart, and printed "Kraft" on the lid instead of using a kraft paper label. OpenAI got all three. It also styled the poster and sign further than asked (a sunset, wheat sprigs).
+- **Time and money:** OpenAI was about 26× faster for about a cent an image. Locally, a `final` is a four-minute wait, which is why Claude iterates on drafts first.
+
 ## Configuration
 
 All configuration comes from environment variables, validated at startup. The server exits with a readable message if anything is invalid.
@@ -189,7 +211,7 @@ npm run check   # typecheck + lint + tests (mock only: no GPU, network, or keys)
 npm run build   # compile to dist/
 npm run test:comfyui   # real ComfyUI at http://127.0.0.1:8188 (or COMFYUI_URL): one draft render plus a cancel; takes ~2 minutes
 npm run test:contract  # provider contract suite; add DARKROOM_CONTRACT_COMFYUI=1 or DARKROOM_CONTRACT_OPENAI=1 to include real providers
-npm run eval           # ten fixed prompts per provider, for comparison; writes eval/report.md (see below)
+npm run eval           # ten fixed prompts per provider; writes eval/report.md (see "Comparison" above and "Eval" below)
 ```
 
 **Smoke test with the MCP Inspector.** After `npm run build`, drive the server without Claude Code. The web UI (`npx @modelcontextprotocol/inspector`) lets you connect to `node dist/index.js` and call each tool by hand; the CLI mode does the same from a shell (the server command comes first, then its options):
