@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M4 — Ship it · status: awaiting review
+## Current: v1 complete (M4 tagged `m4`) · Phase 2 not started
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -10,7 +10,7 @@
 | M1: Local generation (Z-Image) | done | `m1` |
 | M2: Ledger + first paid provider | done | `m2` |
 | M3: Router and guardrails | done | `m3` |
-| M4: Ship it | in progress | — |
+| M4: Ship it | done | `m4` |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
 
@@ -53,12 +53,12 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] Done when (adapted, see Deviations): a clean install from the packed tarball with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command generates a mock image in under five minutes (19 s)
 - [x] Eval run and report committed (20 of 20 images, $0.10)
 - [x] ~~Demo GIF~~ skipped for v1 (Matt, Oct 3, 2026; see Deviations)
-- [ ] Matt approved and merged the PR
-- [ ] Tagged `m4`
+- [x] Matt approved and merged PR #8 (after a multi-model review; all 11 findings fixed)
+- [x] Tagged `m4`
 
 ## Next up
 
-- PR #8 is open for review.
+- v1 is done. Phase 2 (and the deferred demo GIF or an npm publish) waits for Matt's go-ahead.
 
 ## Deviations from spec
 
@@ -93,6 +93,10 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 3, 2026 (UTC) — M4 done (tagged `m4`)
+
+Matt approved and PR #8 was merged (merge commit) after the review fixes. Spend for M4: $0.10 ($0.099975, the OpenAI half of the eval).
 
 ### Oct 3, 2026 (UTC) — review of PR #8
 
