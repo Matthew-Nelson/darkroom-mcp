@@ -154,7 +154,7 @@ Security requirements:
 ## Packaging
 
 - `workflows/` is listed in `package.json` `files` and loaded relative to the module (`import.meta.url`), never relative to the working directory, so `npx` installs work.
-- sharp ships prebuilt native binaries; confirm `npx` install time on a clean machine fits the five-minute goal.
+- sharp ships prebuilt native binaries; confirm `npx` install time on a clean machine fits the five-minute goal. (M4: about 4 s for npx's install from an empty cache, 19 s from `claude mcp add` to the first image.)
 
 ## Testing and eval
 
@@ -170,7 +170,7 @@ The full test suite must pass in CI with no GPU, no network, and no API keys; th
 
 **Eval (`npm run eval`)**
 
-A fixed set of 10 prompts covering text rendering, people, objects, a UI icon, and a scene, run against every enabled provider. Paid runs go through the ledger with their own budget (`DARKROOM_EVAL_BUDGET_USD`, separate from the daily cap, since 10 prompts across two paid providers at high quality can exceed $2). Results are cached by (prompt, provider, model), so rerunning to rebuild the report doesn't spend again. It writes `eval/report.md` with a thumbnail grid plus latency and cost per provider. No automatic quality scoring in v1: the grid is for a human to judge, and the report doubles as the README's comparison section.
+A fixed set of 10 prompts covering text rendering, people, objects, a UI icon, and a scene, run against every enabled provider. Paid runs go through the ledger with their own budget (`DARKROOM_EVAL_BUDGET_USD`, separate from the daily cap, since 10 prompts across two paid providers at high quality can exceed $2). As built in M4, that's a separate ledger file in `DARKROOM_EVAL_OUTPUT_DIR` with the budget as its per-UTC-day cap, and a run that would spend money needs `--yes`. Results are cached by (prompt, provider, model), so rerunning to rebuild the report doesn't spend again. It writes `eval/report.md` with a thumbnail grid plus latency and cost per provider. No automatic quality scoring in v1: the grid is for a human to judge, and the report doubles as the README's comparison section.
 
 ## Local model spike results (Oct 2, 2026)
 
@@ -230,6 +230,7 @@ Five milestones, each ending in a commit Matt can review; the agent stops after 
    - Done when: with ComfyUI stopped and order `comfyui,<paid>`, requests fail clearly by default (unhealthy skip does not reach the paid provider) and fall back to the paid provider only with the flag set; a generic `OPENAI_API_KEY` alone enables nothing.
 5. **M4: Ship it.** Eval run and report, README (setup for each provider, config table, architecture diagram, demo GIF of Claude generating, critiquing, and regenerating), npm publish.
    - Done when: a fresh machine can install it with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command and generate a mock image in under five minutes.
+   - Changed at the start of M4 (Oct 3, 2026): the repo stays private and publishing is Matt's later call, so the install test runs against the packed tarball (`npx -y -p <tgz> darkroom-mcp`, empty npm cache). The license is MIT.
 
 **Immediately after v1:** add the second paid provider, Gemini, as a single, self-contained commit (the "one file plus one registry line" demo), then the Flux schnell and SDXL templates. Gemini gets the same cost benchmark OpenAI got in M2: real `draft` and `final` calls at a few aspect ratios through the ledger, actual cost compared with list price and with OpenAI, its estimates calibrated from the results, and the numbers added to the README's cost table and the eval report.
 
