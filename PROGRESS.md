@@ -94,6 +94,10 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 
 ## Log
 
+### Oct 3, 2026 (UTC) — eval path validation (after `m4`)
+
+A background security check flagged a Low path-traversal issue in the eval; Matt confirmed it by reading the code. `results.json`'s `image` and `thumb` were accepted as any string, and the thumbnail repair added for review finding A3 joins them onto `eval/` and the eval output directory, so a hand-edited file with `../` paths could make `npm run eval` write a JPEG outside `eval/` (only where nothing existed) or read an arbitrary file as an image; `thumb` also went unescaped into the report's `<img src>`. The MCP server doesn't run this code. Fixed on `fix/eval-path-validation` with failing tests first: loading now requires `image` to be a plain `.png` file name and `thumb` to be `thumbs/<name>.jpg` (the shape `thumbPath()` produces), and a bad file fails with a message naming each bad field. The committed `results.json` still loads. `npm run check`: 300 tests.
+
 ### Oct 3, 2026 (UTC) — M4 done (tagged `m4`)
 
 Matt approved and PR #8 was merged (merge commit) after the review fixes. Spend for M4: $0.10 ($0.099975, the OpenAI half of the eval).
