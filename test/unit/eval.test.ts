@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -111,7 +112,7 @@ describe("loadEvalConfig", () => {
 
 describe("eval/prompts.json", () => {
   it("has 10 prompts covering text, people, objects, an icon, and scenes", async () => {
-    const shipped = await loadPrompts(new URL("../../eval/prompts.json", import.meta.url).pathname);
+    const shipped = await loadPrompts(fileURLToPath(new URL("../../eval/prompts.json", import.meta.url)));
     expect(shipped).toHaveLength(10);
     expect(new Set(shipped.map((p) => p.category))).toEqual(new Set(["text", "people", "object", "icon", "scene"]));
   });
