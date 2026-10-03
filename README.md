@@ -4,7 +4,7 @@ An MCP server that gives Claude Code an image generation tool. Claude writes the
 
 Providers are swappable: a free local model (Z-Image Turbo via ComfyUI) by default, OpenAI or Gemini as opt-in paid options, and a `mock` provider for tests and demos.
 
-> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` and `gemini` providers work, with fallback between them, a daily spend cap, and three tools. The package isn't on npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
+> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` and `gemini` providers work, with fallback between them, a daily spend cap, and three tools. It isn't published to npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
 
 ## How it works
 
@@ -48,7 +48,7 @@ Start a new Claude Code session and ask for an image, for example "make me a pla
 claude mcp add darkroom -e DARKROOM_PROVIDER_ORDER=mock -- npx -y -p /path/to/darkroom-mcp-0.1.0.tgz darkroom-mcp
 ```
 
-From an empty npm cache this took 19 seconds from `claude mcp add` to Claude describing its first image (npx's install itself is about 4 seconds; sharp ships prebuilt binaries). If the package were on npm, the command would end in `-- npx -y darkroom-mcp`.
+From an empty npm cache this took 19 seconds from `claude mcp add` to Claude describing its first image (npx's install itself is about 4 seconds; sharp ships prebuilt binaries).
 
 ## Local generation (ComfyUI + Z-Image Turbo)
 

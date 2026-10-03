@@ -72,7 +72,8 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 ## Next up
 
-- M5 is done. Next steps wait for Matt's go-ahead: the M1 review's unaddressed Lows (cancel path), the Flux schnell template (optional), the demo GIF, the npm publish decision, then Phase 2.
+- M5 is done. Next steps wait for Matt's go-ahead: the M1 review's unaddressed Lows (cancel path), the Flux schnell template (optional), the demo GIF, then Phase 2.
+- Going public (`chore/go-public`): once that PR merges, make the repo public, then turn on branch protection for `main` (PR plus passing CI), secret scanning with push protection, private vulnerability reporting, and Dependabot alerts.
 - Check Google's billing report for Oct 3 (UTC) once it updates: it should show about $1.22. Much more would mean the unlabeled output tokens are billed at the image rate (see the M5 log).
 
 ## Deviations from spec
@@ -83,6 +84,7 @@ Done when (agreed with Matt, Oct 3, 2026):
 - **`generateContent`, not the Interactions API** (M5). Google now steers new projects to the beta Interactions API, but recommends `generateContent` for stable deployments, and Interactions stores requests by default.
 - **Gemini's unlabeled output tokens are billed at the text rate** (M5). Each response reported 414–482 output tokens beyond the `IMAGE` count, with no modality and no `thoughtsTokenCount`. Darkroom prices them at the $3/M text and thinking rate, which puts its computed costs 2.2–2.6% over the per-image list price (that price covers only image tokens); at the image rate they'd be 37–59% over. This is Darkroom's own arithmetic, to be confirmed against Google's billing report.
 
+- **Public repo, no npm package** (Matt, Oct 3, 2026). Darkroom is a portfolio piece: the repo goes public and is never published to npm. `package.json` has `"private": true` so `npm publish` refuses (`npm pack` still works), the dead `prepublishOnly` hook is gone, and SPEC's "published package" goal and Phase 2 gate now mean the public repo. Before going public, all 106 commits, PR text, and review comments were searched for keys: only test fakes. Commit author emails stay as they are (rewriting history would break the tags and PR merges).
 - **No demo GIF in v1** (Matt, Oct 3, 2026). SPEC's M4 lists a README GIF of Claude generating, critiquing, and regenerating. Skipped for now; the README's visuals are the eval thumbnails. It can be added later as its own `docs/` PR (record the terminal, then trim and convert with ffmpeg).
 - **No npm publish in M4** (Matt, Oct 3, 2026: the repo stays private, and publishing is undecided). The acceptance test ran against the packed tarball instead (`npm pack`, then `claude mcp add ... -- npx -y -p <tgz> darkroom-mcp` with an empty npm cache), which exercises the same install path. Publishing later is `npm publish` plus swapping the README's command for `npx -y darkroom-mcp`. License: MIT.
 - **The eval budget is per UTC day** (M4). The eval keeps its own ledger in `DARKROOM_EVAL_OUTPUT_DIR` (default `~/.darkroom/eval`, apart from the images `list_images` shows), using the same daily-keyed ledger code with `DARKROOM_EVAL_BUDGET_USD` (default $0.50) as the cap. A run that would spend anything stops after printing its estimate unless given `--yes`. The cache key also includes aspect ratio and quality.
