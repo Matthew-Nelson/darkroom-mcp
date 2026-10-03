@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M3 — Router and guardrails · status: awaiting review
+## Current: M4 — Ship it · status: not started
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -9,7 +9,7 @@
 | M0: Scaffold and mock | done | `m0` |
 | M1: Local generation (Z-Image) | done | `m1` |
 | M2: Ledger + first paid provider | done | `m2` |
-| M3: Router and guardrails | awaiting review | — |
+| M3: Router and guardrails | done | `m3` |
 | M4: Ship it | not started | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
@@ -44,13 +44,12 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] Done when: with ComfyUI stopped and order `comfyui,openai`, requests fail clearly by default (unhealthy skip doesn't reach the paid provider)
 - [x] Done when: they fall back to the paid provider only with `DARKROOM_ALLOW_PAID_FALLBACK=true`
 - [x] Done when: a generic `OPENAI_API_KEY` alone enables nothing
-- [ ] Matt approved and merged the M3 PR
-- [ ] Tagged `m3`
+- [x] Matt approved and merged PR #7 (after a multi-model review; all 4 Low findings fixed)
+- [x] Tagged `m3`
 
 ## Next up
 
-- Matt reviews the M3 PR, [#7](https://github.com/Matthew-Nelson/darkroom-mcp/pull/7) (branch `m3/router-guardrails`). Once he approves, add the "Mark M3 done" commit; after he merges, tag `m3`.
-- Then M4 (eval, README polish and demo GIF, npm publish), after Matt's go-ahead.
+- Plan M4 (eval run and report, README with setup per provider, config table, architecture diagram, and demo GIF, npm publish) and give Matt a short plan before coding. Pick a license before publishing (see Open questions).
 
 ## Deviations from spec
 
@@ -81,6 +80,10 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - License: `package.json` says `UNLICENSED` for now. Pick one before publishing in M4.
 
 ## Log
+
+### Oct 3, 2026 (UTC) — M3 done (tagged `m3`)
+
+Matt approved and PR #7 was merged (merge commit) after the review fixes. Spend for M3: $0.0104 (two OpenAI drafts during acceptance).
 
 ### Oct 3, 2026 (UTC) — review of PR #7
 
