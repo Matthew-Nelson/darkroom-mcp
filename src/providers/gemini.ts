@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import sharp from "sharp";
 import { ConfigError } from "../config.js";
 import { networkError, redactKey, roundUsd } from "./paid-api.js";
@@ -37,9 +38,14 @@ export const GEMINI_MODELS: Record<string, Model> = {
 // whatever the aspect ratio.
 const IMAGE_TOKENS: Record<ImageSize, number> = { "512": 747, "1K": 1120 };
 
-// Thinking can't be turned off for these models and is billed as text output.
-// An allowance until the benchmark measures it.
-const ESTIMATED_THOUGHT_TOKENS = 1000;
+// Output beyond the image itself. In the M5 benchmark (Oct 3, 2026) every response
+// reported 414–482 more output tokens than its IMAGE count, with no modality and no
+// thoughtsTokenCount; that's taken to be thinking (which can't be turned off), billed as
+// text output. Measured costs were within 1% of list price, which supports that reading.
+const ESTIMATED_EXTRA_OUTPUT_TOKENS = 600;
+
+// generationConfig.seed is a 32-bit signed integer.
+const MAX_SEED = 2 ** 31 - 1;
 
 // Prompt text tokens: errs high, as for OpenAI.
 const estimatePromptTokens = (prompt: string) => Math.ceil(prompt.length / 3) + 20;
@@ -84,7 +90,7 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
     return roundUsd(
       (estimatePromptTokens(req.prompt) * rates.input +
         imageTokens * rates.imageOutput +
-        ESTIMATED_THOUGHT_TOKENS * rates.textOutput) /
+        ESTIMATED_EXTRA_OUTPUT_TOKENS * rates.textOutput) /
         1e6,
     );
   }
@@ -93,7 +99,9 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
     name: "gemini",
     model,
     isPaid: true,
-    supports: { negativePrompt: false, seed: false },
+    // Not exact: the same seed gives the same composition, slightly reframed, and it
+    // carries from a 512px draft to a 1K final (M5 benchmark).
+    supports: { negativePrompt: false, seed: true },
     estimateCostUsd,
 
     // Free and offline, per the spec: a paid provider is healthy when it has its key.
@@ -114,6 +122,13 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
         // Not a bare AbortError: the router keeps the reservation for those, and nothing was sent yet.
         throw new ProviderError("Cancelled before the request was sent to Gemini.", { notCharged: true });
       }
+      if (req.seed !== undefined && req.seed > MAX_SEED) {
+        throw new ProviderError(
+          `Gemini seeds go up to ${MAX_SEED}, and this one is ${req.seed} (perhaps from another provider). Use a smaller seed, or none.`,
+          { notCharged: true },
+        );
+      }
+      const seed = req.seed ?? randomInt(0, MAX_SEED + 1);
       const imageSize = geminiImageSize(model, req.quality);
       const sizeLabel = imageSize === "512" ? "512px" : imageSize;
       onProgress?.({ message: `Waiting for Gemini (${model}, ${sizeLabel}, ${req.aspectRatio})` });
@@ -133,6 +148,7 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
             contents: [{ role: "user", parts: [{ text: req.prompt }] }],
             generationConfig: {
               responseModalities: ["IMAGE"],
+              seed,
               imageConfig: { aspectRatio: req.aspectRatio, imageSize },
             },
           }),
@@ -198,7 +214,7 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
         model,
         width: meta.width,
         height: meta.height,
-        seed: null,
+        seed,
         ...(actualCostUsd !== undefined && { actualCostUsd }),
       };
     },

@@ -26,8 +26,8 @@ providerContract(
   { cases: ALL_SHAPES },
 );
 
-// Gemini picks sizes from the aspect ratio and tier; this fake uses 1K's 1:1 and an
-// approximate shape for the others (the real sizes are recorded in the fixtures README).
+// Gemini picks sizes from the aspect ratio and tier. 1:1 and 16:9 are sizes seen in the
+// M5 benchmark (and 3:2 at half size); the rest are assumed by symmetry.
 const GEMINI_SIDES: Record<string, [number, number]> = {
   "1:1": [1024, 1024],
   "3:2": [1248, 832],

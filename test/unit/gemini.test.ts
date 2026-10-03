@@ -10,6 +10,8 @@ import { ContentRefusedError, ProviderError, type GenerateRequest } from "../../
 const KEY = "AIzaTHISISAFAKEKEYFORTESTS0123456789abc";
 const request: GenerateRequest = { prompt: "a mug that says DARKROOM", aspectRatio: "1:1", quality: "draft" };
 const signal = new AbortController().signal;
+const BENCHMARK_PROMPT =
+  "a ceramic coffee mug on a wooden desk by a window, morning light, the mug reads DARKROOM in bold letters";
 
 const fixtureText = (name: string) => readFileSync(new URL(`../fixtures/gemini/${name}`, import.meta.url), "utf8");
 
@@ -54,39 +56,51 @@ const candidate = (parts: unknown[], finishReason = "STOP") => () =>
   Response.json({ candidates: [{ content: { role: "model", parts }, finishReason }] });
 
 describe("gemini provider", () => {
-  it("is paid, has no seed or negative prompt, and reports a cost estimate", () => {
-    const p = provider(fakeFetch(reply("generate-200.json")).fetch);
+  it("is paid, supports a seed but no negative prompt, and reports a cost estimate", () => {
+    const p = provider(fakeFetch(reply("generate-200-draft.json")).fetch);
     expect(p.name).toBe("gemini");
     expect(p.model).toBe("gemini-3.1-flash-image");
     expect(p.isPaid).toBe(true);
-    expect(p.supports).toEqual({ negativePrompt: false, seed: false });
+    expect(p.supports).toEqual({ negativePrompt: false, seed: true });
     const draft = p.estimateCostUsd(request);
     const final = p.estimateCostUsd({ ...request, quality: "final" });
     expect(final).toBeGreaterThan(draft);
   });
 
   it("estimates at least the list price per image (512px $0.045, 1K $0.067)", () => {
-    const p = provider(fakeFetch(reply("generate-200.json")).fetch);
+    const p = provider(fakeFetch(reply("generate-200-draft.json")).fetch);
     expect(p.estimateCostUsd(request)).toBeGreaterThan(0.0448);
     expect(p.estimateCostUsd({ ...request, quality: "final" })).toBeGreaterThan(0.0672);
     expect(p.estimateCostUsd({ ...request, quality: "final" })).toBeLessThan(0.1);
   });
 
+  it.each([
+    ["generate-200-draft.json", "draft"],
+    ["generate-200-final.json", "final"],
+  ] as const)("estimates at least the recorded real cost (%s)", async (fixture, quality) => {
+    const p = provider(fakeFetch(reply(fixture)).fetch);
+    const req = { prompt: BENCHMARK_PROMPT, aspectRatio: "1:1", quality } as const;
+    const actual = (await p.generate(req, signal)).actualCostUsd ?? 0;
+    expect(actual).toBeGreaterThan(0);
+    expect(p.estimateCostUsd(req)).toBeGreaterThanOrEqual(actual);
+    expect(p.estimateCostUsd(req)).toBeLessThan(actual * 1.5); // high, but not wildly so
+  });
+
   it("estimates a long prompt's input tokens", () => {
-    const p = provider(fakeFetch(reply("generate-200.json")).fetch);
+    const p = provider(fakeFetch(reply("generate-200-draft.json")).fetch);
     const short = p.estimateCostUsd(request);
     const long = p.estimateCostUsd({ ...request, prompt: "x".repeat(4000) });
     expect(long - short).toBeGreaterThan((1000 * 0.5) / 1e6);
   });
 
   it("refuses to start with a model it has no prices for", () => {
-    expect(() => provider(fakeFetch(reply("generate-200.json")).fetch, { model: "gemini-2.5-flash-image" })).toThrow(
+    expect(() => provider(fakeFetch(reply("generate-200-draft.json")).fetch, { model: "gemini-2.5-flash-image" })).toThrow(
       ConfigError,
     );
   });
 
   it("is healthy with a key, and explains the missing key without one", async () => {
-    const { fetch, calls } = fakeFetch(reply("generate-200.json"));
+    const { fetch, calls } = fakeFetch(reply("generate-200-draft.json"));
     expect(await provider(fetch).healthCheck()).toEqual({ ok: true });
     const health = await provider(fetch, { apiKey: undefined }).healthCheck();
     expect(health.ok).toBe(false);
@@ -95,15 +109,15 @@ describe("gemini provider", () => {
   });
 
   it("won't call the API without a key", async () => {
-    const { fetch, calls } = fakeFetch(reply("generate-200.json"));
+    const { fetch, calls } = fakeFetch(reply("generate-200-draft.json"));
     const err = await failure(provider(fetch, { apiKey: undefined }).generate(request, signal));
     expect(err).toBeInstanceOf(ProviderError);
     expect((err as ProviderError).notCharged).toBe(true);
     expect(calls).toHaveLength(0);
   });
 
-  it("posts the prompt, aspect ratio, and size, with the key in a header and never the URL", async () => {
-    const { fetch, calls } = fakeFetch(reply("generate-200.json"));
+  it("posts the prompt, aspect ratio, size, and seed, with the key in a header and never the URL", async () => {
+    const { fetch, calls } = fakeFetch(reply("generate-200-draft.json"));
     await provider(fetch).generate({ ...request, aspectRatio: "3:2", negativePrompt: "blurry", seed: 42 }, signal);
     expect(calls).toHaveLength(1);
     const [call] = calls;
@@ -115,12 +129,38 @@ describe("gemini provider", () => {
     expect(new Headers(call?.init.headers).get("x-goog-api-key")).toBe(KEY);
     expect(call?.body).toEqual({
       contents: [{ role: "user", parts: [{ text: request.prompt }] }],
-      generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "3:2", imageSize: "512" } },
+      generationConfig: {
+        responseModalities: ["IMAGE"],
+        seed: 42,
+        imageConfig: { aspectRatio: "3:2", imageSize: "512" },
+      },
     });
   });
 
+  it("picks a random 32-bit seed when none is given, sends it, and returns it", async () => {
+    const { fetch, calls } = fakeFetch(reply("generate-200-draft.json"));
+    const result = await provider(fetch).generate(request, signal);
+    const sent = (calls[0]?.body.generationConfig as { seed?: unknown }).seed;
+    expect(Number.isInteger(sent)).toBe(true);
+    expect(sent).toBeGreaterThanOrEqual(0);
+    expect(sent).toBeLessThanOrEqual(2 ** 31 - 1);
+    expect(result.seed).toBe(sent);
+  });
+
+  it("refuses a seed too big for Gemini before sending anything, as uncharged", async () => {
+    const { fetch, calls } = fakeFetch(reply("generate-200-draft.json"));
+    const ok = await provider(fetch).generate({ ...request, seed: 2 ** 31 - 1 }, signal);
+    expect(ok.seed).toBe(2 ** 31 - 1);
+    const err = await failure(provider(fetch).generate({ ...request, seed: 2 ** 31 }, signal));
+    expect(err.message).toBe(
+      "Gemini seeds go up to 2147483647, and this one is 2147483648 (perhaps from another provider). Use a smaller seed, or none.",
+    );
+    expect((err as ProviderError).notCharged).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+
   it("renders final at 1K", async () => {
-    const { fetch, calls } = fakeFetch(reply("generate-200.json"));
+    const { fetch, calls } = fakeFetch(reply("generate-200-draft.json"));
     await provider(fetch).generate({ ...request, aspectRatio: "16:9", quality: "final" }, signal);
     expect(calls[0]?.body).toMatchObject({ generationConfig: { imageConfig: { aspectRatio: "16:9", imageSize: "1K" } } });
   });
@@ -128,19 +168,22 @@ describe("gemini provider", () => {
   it("renders Flash Lite drafts at 1K, its only size", () => {
     expect(geminiImageSize("gemini-3.1-flash-lite-image", "draft")).toBe("1K");
     expect(geminiImageSize("gemini-3.1-flash-image", "draft")).toBe("512");
-    const lite = provider(fakeFetch(reply("generate-200.json")).fetch, { model: "gemini-3.1-flash-lite-image" });
+    const lite = provider(fakeFetch(reply("generate-200-draft.json")).fetch, { model: "gemini-3.1-flash-lite-image" });
     expect(lite.estimateCostUsd(request)).toBe(lite.estimateCostUsd({ ...request, quality: "final" }));
   });
 
-  it("returns the final (non-thought) PNG, its real size, no seed, and the actual cost from usage", async () => {
+  it("returns a PNG (Gemini sends JPEG), its real size, the seed, and the actual cost from usage", async () => {
     const onProgress: string[] = [];
-    const result = await provider(fakeFetch(reply("generate-200.json")).fetch).generate(request, signal, (u) =>
-      onProgress.push(u.message),
+    const result = await provider(fakeFetch(reply("generate-200-draft.json")).fetch).generate(
+      { ...request, seed: 7 },
+      signal,
+      (u) => onProgress.push(u.message),
     );
     expect((await sharp(result.png).metadata()).format).toBe("png");
-    expect(result).toMatchObject({ model: "gemini-3.1-flash-image", width: 8, height: 8, seed: null });
-    // 24 prompt tokens at $0.50/M, 747 image tokens at $60/M, 300 thought tokens at $3/M.
-    expect(result.actualCostUsd).toBe(roundUsd((24 * 0.5 + 747 * 60 + 300 * 3) / 1e6));
+    expect(result).toMatchObject({ model: "gemini-3.1-flash-image", width: 8, height: 8, seed: 7 });
+    // Recorded usage: 24 prompt tokens at $0.50/M, 747 image tokens at $60/M, and the other
+    // 449 output tokens (no modality given; thinking) at the $3/M text rate.
+    expect(result.actualCostUsd).toBe(0.046179);
     expect(onProgress).toEqual(["Waiting for Gemini (gemini-3.1-flash-image, 512px, 1:1)"]);
   });
 
@@ -264,7 +307,7 @@ describe("gemini provider", () => {
   });
 
   it("doesn't start when the signal is already aborted, and says nothing was charged", async () => {
-    const { fetch, calls } = fakeFetch(reply("generate-200.json"));
+    const { fetch, calls } = fakeFetch(reply("generate-200-draft.json"));
     const err = await failure(provider(fetch).generate(request, AbortSignal.abort()));
     expect(err.message).toBe("Cancelled before the request was sent to Gemini.");
     expect((err as ProviderError).notCharged).toBe(true);
