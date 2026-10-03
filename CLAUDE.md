@@ -52,4 +52,5 @@ Remote: `github.com/Matthew-Nelson/darkroom-mcp` (private). `main` only changes 
 ## Gotchas
 
 - stdout is the MCP stdio channel: log to stderr only.
+- There's no formatter: no Prettier config, so don't run `npx prettier` (it reformats everything to 80 columns). Match the surrounding style by hand; lines run to about 120 characters.
 - Never log or return API keys.
