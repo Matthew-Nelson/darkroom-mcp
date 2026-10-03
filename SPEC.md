@@ -68,7 +68,7 @@ Tool descriptions must be written for the model: say when to use the tool, that 
 
 ## Providers
 
-v1 ships three providers, each a single file implementing the `ImageProvider` interface: `mock`, `comfyui`, and one paid provider (OpenAI, chosen at the start of M2). Gemini followed immediately after v1, as M5. Model names and prices below were checked on Oct 2, 2026; verify them against current provider docs before changing them. The model is set in config; each paid provider keeps its per-token rates in a small table at the top of its file (one line per model), and refuses to start with a model it has no rates for.
+v1 ships three providers, each a single file implementing the `ImageProvider` interface: `mock`, `comfyui`, and one paid provider (OpenAI, chosen at the start of M2). Gemini followed immediately after v1, as M5. Model names and prices below were checked on Oct 2, 2026 (Gemini's again on Oct 3, when M5 measured its costs); verify them against current provider docs before changing them. The model is set in config; each paid provider keeps its per-token rates in a small table at the top of its file (one line per model), and refuses to start with a model it has no rates for.
 
 | Provider | Cost | How it works | Notes |
 | --- | --- | --- | --- |

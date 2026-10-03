@@ -41,7 +41,9 @@ const IMAGE_TOKENS: Record<ImageSize, number> = { "512": 747, "1K": 1120 };
 // Output beyond the image itself. In the M5 benchmark (Oct 3, 2026) every response
 // reported 414–482 more output tokens than its IMAGE count, with no modality and no
 // thoughtsTokenCount; that's taken to be thinking (which can't be turned off), billed as
-// text output. Measured costs were within 1% of list price, which supports that reading.
+// text output. Priced that way, the benchmark's costs come out 2.2–2.6% over the per-image
+// list price (which leaves thinking out); at the image rate they'd be 37–59% over. These are
+// Darkroom's own figures; Google's billing report is the check.
 const ESTIMATED_EXTRA_OUTPUT_TOKENS = 600;
 
 // generationConfig.seed is a 32-bit signed integer.
