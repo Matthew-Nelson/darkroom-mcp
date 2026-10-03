@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "MCP server that gives Claude Code an image generation tool across swappable providers (local ComfyUI, OpenAI, Gemini, mock).",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "author": "Matt Nelson",
   "repository": {
     "type": "git",
