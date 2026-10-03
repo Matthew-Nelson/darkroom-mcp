@@ -72,7 +72,7 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 ## Next up
 
-- M5 commits 1–4 are built and tested offline (helpers, config, provider, real contract run). Next: Matt creates a Gemini API key with billing on, then the real contract run, cost benchmark (including whether `seed` repeats an image), acceptance runs, eval, and docs. Agreed spend budget: $1.50.
+- Provider built, contract-tested against the real API, benchmarked, and calibrated. Next: acceptance runs (four providers, bad key, fallback, cap), the eval's Gemini column, and docs (README, SPEC, deviations), then the PR. Spent so far about $0.44 of the $1.50 budget.
 
 ## Deviations from spec
 
@@ -115,6 +115,29 @@ Matt approved the plan: Gemini as M5, default model `gemini-3.1-flash-image`, sp
 Docs checked today: Gemini pricing (unchanged from the spec: $0.50/M input, $60/M image output, $3/M text and thinking output; 747 tokens at 512px, 1,120 at 1K; no free tier), the image generation guide, and the `generateContent` API reference (`imageConfig.aspectRatio` and `imageSize` of `512`/`1K`, `responseModalities`, `usageMetadata` with per-modality counts and `thoughtsTokenCount`, `promptFeedback.blockReason`, image `finishReason`s, `thought` parts). Google now points new projects at the beta Interactions API; Darkroom uses `generateContent`, which Google recommends for stable deployments and which doesn't store requests.
 
 Built so far (offline): shared paid-API helpers, `DARKROOM_GEMINI_MODEL` and `DARKROOM_GEMINI_TIMEOUT_MS`, the `gemini` provider with unit tests and the offline contract suite, and `DARKROOM_CONTRACT_GEMINI=1`. Smoke test over stdio with order `gemini,mock` and only a generic `GEMINI_API_KEY` set: `list_providers` reports Gemini unhealthy with the "not set" detail, and a request names the missing `DARKROOM_GEMINI_API_KEY`.
+
+**Key and contract run.** Matt's key is in the Keychain as `darkroom-gemini`. It's in Google's newer format (two capitals and a dot, ~53 characters, not `AIza…`), so redaction gained a pattern for it (failing test first; checked against the real key without printing it). A free `GET /v1beta/models` returned 200 and listed both models. `DARKROOM_CONTRACT_GEMINI=1 npm run test:contract`: 5 passed in 8 s (one 512px draft, estimated $0.0478, outside the ledger by design).
+
+**Cost benchmark** through the real router and ledger (cap $0.60), the M2 prompt ("a ceramic coffee mug on a wooden desk by a window, morning light, the mug reads DARKROOM in bold letters"):
+
+| Request | Size | Time | Output tokens (image) | Actual | Estimate then |
+| --- | --- | --- | --- | --- | --- |
+| draft 1:1 (512) | 512×512 | 6.7 s | 1,196 (747) | $0.046179 | $0.047848 |
+| draft 3:2 (512) | 624×416 | 10.8 s | 1,172 (747) | $0.046107 | $0.047848 |
+| final 1:1 (1K) | 1024×1024 | 9.7 s | 1,602 (1,120) | $0.068658 | $0.070228 |
+| final 16:9 (1K) | 1376×768 | 11.0 s | 1,550 (1,120) | $0.068502 | $0.070228 |
+
+Ledger: $0.229446. All four spelled "DARKROOM" correctly, drafts included. Unlike OpenAI, the image token count is flat across aspect ratios, matching the pricing page (747 at 512, 1,120 at 1K). Compared with OpenAI's measured costs: a Gemini draft ($0.046) costs about 9× an OpenAI draft ($0.0053) and about 3.5× an OpenAI square final ($0.0133); a Gemini final costs about 5× an OpenAI square final.
+
+**Seed test** (direct API calls with `generationConfig.seed: 42`, outside the ledger): two 512px drafts gave the same composition, slightly reframed (not byte-identical; mean pixel difference 35/255 at 64×64), while an unseeded draft was a different scene. A 1K final with seed 42 matched the drafts' composition. So the seed carries from draft to final; Gemini now supports `seed`. $0.092 + $0.068.
+
+**Findings:**
+
+- Responses are `image/jpeg`, one part, with a `thoughtSignature` but no `thought: true` parts or interim images, and no `thoughtsTokenCount`. Output runs 414–482 tokens over the `IMAGE` count with no modality. Billing those at the $3/M text and thinking rate gives costs within 1% of list price; at the image rate they'd be ~55% over list, so the text rate is the likely reading. To confirm against Google's billing report once it updates (about $0.44 so far today, Oct 3 UTC).
+- Latency 7–11 s, like OpenAI (8–19 s in M2).
+- Benchmark images: `~/.darkroom/benchmark-m5/`.
+
+**Spend so far:** about $0.44 ($0.048 contract run + $0.229 benchmark + $0.160 seed test), of the agreed $1.50.
 
 ### Oct 3, 2026 (UTC) — eval path validation (after `m4`)
 
