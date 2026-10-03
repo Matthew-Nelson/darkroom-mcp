@@ -27,7 +27,7 @@ Use this when the user wants an image: an illustration, icon, photo, mockup, dia
 
 By default this runs on a free local model. Local generation is slow (minutes, not seconds: about 1.5 minutes for "draft", 3 to 4 minutes for "final"), so iterate with quality "draft" and render "final" only once the composition is right, passing the draft's seed. With the default local model a new seed gives nearly the same picture, so to explore variations, reword the prompt instead of changing the seed.
 
-Only pass "provider" when the user explicitly asks for a specific provider, because some providers cost money. Otherwise leave it out and the configured default is used.`;
+Only pass "provider" when the user explicitly asks for a specific provider, because some providers cost money. Otherwise leave it out and the configured default is used. If a provider is unavailable or fails, the next one in the configured order is tried; tell the user when skipped_providers is not empty.`;
 
 const inputSchema = {
   prompt: z

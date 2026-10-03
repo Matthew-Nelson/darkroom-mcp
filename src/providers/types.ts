@@ -32,6 +32,7 @@ export type ProgressListener = (update: ProgressUpdate) => void;
 
 export interface ImageProvider {
   name: string;
+  model: string; // what GenerateResult.model will say, shown before any generation
   isPaid: boolean;
   supports: { negativePrompt: boolean; seed: boolean };
   estimateCostUsd(req: GenerateRequest): number;

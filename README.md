@@ -4,7 +4,7 @@ An MCP server that gives Claude Code an image generation tool. Claude writes the
 
 Providers are swappable: a free local model (Z-Image Turbo via ComfyUI) by default, OpenAI or Gemini as opt-in paid options, and a `mock` provider for tests and demos.
 
-> **Status:** early development (milestone M2). The `mock`, local `comfyui`, and paid `openai` providers work; fallback between providers and the `list_*` tools land in M3. See [`SPEC.md`](SPEC.md) for the plan.
+> **Status:** early development (milestone M3). The `mock`, local `comfyui`, and paid `openai` providers work, with fallback between them and the `list_providers` and `list_images` tools; packaging and npm publish land in M4. See [`SPEC.md`](SPEC.md) for the plan.
 
 ## Quick start (mock provider)
 
@@ -100,7 +100,12 @@ Square images cost the most; wide ones use fewer tokens despite having as many p
 - Separate Claude Code sessions share the ledger file, but there's no lock between them. If two sessions start paid requests in the same instant, both can pass the cap check, and one can briefly erase the other's reservation; it's restored when that request finishes, so its spend still counts. That small race is accepted.
 - Results report `cost_usd`, with `cost_is_estimate: true` only when the provider didn't report usage.
 
-**Fallback.** If a free provider earlier in the order is skipped (for example, ComfyUI isn't running), Darkroom does **not** move on to a paid one unless `DARKROOM_ALLOW_PAID_FALLBACK=true`. Asking for `provider: "openai"` explicitly still goes through the cap.
+**Fallback.** Darkroom tries the providers in `DARKROOM_PROVIDER_ORDER` in turn. It passes over one that isn't healthy (for example, ComfyUI isn't running) and moves on when one fails or times out. The result's `skipped_providers` says what was passed over and why, so a fallback is never silent.
+
+- After a free provider is skipped or fails, Darkroom does **not** move on to a paid one unless `DARKROOM_ALLOW_PAID_FALLBACK=true`. The flag only unlocks paid providers already in the order.
+- A prompt the provider refuses on policy grounds is returned to Claude as is, never retried on another provider. Cancelling a request stops it; nothing else is tried.
+- Asking for a provider explicitly (`provider: "openai"`) uses only that one, with no fallback, and a paid one still goes through the cap.
+- A healthy check is reused for 60 seconds. An unhealthy provider is checked again on every request, so starting ComfyUI takes effect at once.
 
 ## Tools
 
@@ -120,6 +125,19 @@ Returns a JPEG preview (at most 768px on the long edge) for Claude to see, a tex
 
 Each image is saved as `<slug>-<id>.png` next to `<slug>-<id>.json`, which holds the full request and the result metadata. Files are never overwritten.
 
+### `list_providers`
+
+No inputs; read-only, and never generates or spends anything. Returns the configured order and whether paid fallback is on; for each provider (enabled ones first, in order): whether it's enabled and healthy, its model, whether it costs money, its estimated cost for a square `draft` and `final`, and a note saying why it can't be used, how to enable it, or that a paid provider behind a free one is only used when asked for by name. Also today's paid spend (including requests still running), the cap, and what's left, for the current UTC day. Health results come from the same 60-second cache the router uses.
+
+### `list_images`
+
+| Input | Default | Notes |
+| --- | --- | --- |
+| `limit` | `20` | 1 to 100 |
+| `provider` | all | Only images made by this provider |
+
+Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, and cost. Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be read or parsed, or their PNG is gone. A broken sidecar or a missing PNG is skipped quietly; any other read error (permissions, for example) is also logged to stderr. The PNG path always comes from the sidecar's file name, never from its contents.
+
 ## Configuration
 
 All configuration comes from environment variables, validated at startup. The server exits with a readable message if anything is invalid.
@@ -129,7 +147,7 @@ All configuration comes from environment variables, validated at startup. The se
 | `DARKROOM_OUTPUT_DIR` | `~/.darkroom/images` | Absolute path for images, sidecars, and the spend ledger. Relative paths are rejected because the server's working directory depends on the client. A leading `~/` is expanded. |
 | `DARKROOM_PROVIDER_ORDER` | `comfyui` | Comma-separated priority list: `mock`, `comfyui`, `openai`, `gemini` |
 | `DARKROOM_DAILY_CAP_USD` | `2.00` | Daily paid-spend ceiling, in USD, per UTC day |
-| `DARKROOM_ALLOW_PAID_FALLBACK` | `false` | Lets the router move from a skipped free provider to a paid one already in the order |
+| `DARKROOM_ALLOW_PAID_FALLBACK` | `false` | Lets the router move from a skipped or failed free provider to a paid one already in the order |
 | `COMFYUI_URL` | `http://127.0.0.1:8188` | Local ComfyUI server |
 | `COMFYUI_WORKFLOW` | `zimage` | Workflow template in `workflows/`. A missing template fails startup |
 | `COMFYUI_TIMEOUT_MS` | `300000` | Per-request timeout, including time waiting in ComfyUI's queue. 1000 to 2147483647 (about 24.8 days, Node's timer limit) |

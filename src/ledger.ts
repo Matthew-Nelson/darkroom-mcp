@@ -222,7 +222,7 @@ export class Ledger {
 }
 
 /** "$2.00", "$0.001", "$0.0915": at least cents, up to four decimals, so sub-cent amounts don't round away. */
-function formatUsd(usd: number): string {
+export function formatUsd(usd: number): string {
   return `$${usd.toFixed(4).replace(/(\.\d{2}\d*?)0+$/, "$1")}`;
 }
 

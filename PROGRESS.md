@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M3 — Router and guardrails · status: not started
+## Current: M4 — Ship it · status: not started
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -9,7 +9,7 @@
 | M0: Scaffold and mock | done | `m0` |
 | M1: Local generation (Z-Image) | done | `m1` |
 | M2: Ledger + first paid provider | done | `m2` |
-| M3: Router and guardrails | not started | — |
+| M3: Router and guardrails | done | `m3` |
 | M4: Ship it | not started | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
@@ -38,13 +38,25 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] Matt approved PR #5 (after two multi-model reviews; all findings worth fixing were fixed)
 - [x] Merged (PR #5) and tagged `m2` (the tag was moved onto the merge of the wrap-up docs PR, at Matt's request)
 
+## M3 gates
+
+- [x] `npm run check` passes (276 tests, after review fixes)
+- [x] Done when: with ComfyUI stopped and order `comfyui,openai`, requests fail clearly by default (unhealthy skip doesn't reach the paid provider)
+- [x] Done when: they fall back to the paid provider only with `DARKROOM_ALLOW_PAID_FALLBACK=true`
+- [x] Done when: a generic `OPENAI_API_KEY` alone enables nothing
+- [x] Matt approved and merged PR #7 (after a multi-model review; all 4 Low findings fixed)
+- [x] Tagged `m3`
+
 ## Next up
 
-- Plan M3 (fallback on failure with paid gating on every step, 60s health caching, refusal handling, `list_providers`, `list_images`) and give Matt a short plan before coding.
-- Open process question for Matt: `CLAUDE.md` says one PR per reviewable slice, but M2 shipped as one PR at his request. Ask whether M3 should be one PR or slices.
+- Plan M4 (eval run and report, README with setup per provider, config table, architecture diagram, and demo GIF, npm publish) and give Matt a short plan before coding. Pick a license before publishing (see Open questions).
 
 ## Deviations from spec
 
+- **Only healthy results are cached for 60s** (M3). SPEC says "health check cached for 60s". Caching a failure would leave ComfyUI skipped for up to a minute after it's started; checks are cheap, so unhealthy providers are rechecked on every call. A failed `generate` also drops the provider's cached result.
+- **Which failures fall back** (M3): anything except a `ContentRefusedError`, the caller's own cancel, or a failure of an explicitly chosen provider (which is returned as is). Each failure is listed in `skipped_providers` as `failed: <reason>`.
+- **One PR per milestone** (decided Oct 2, 2026, start of M3). Replaces one PR per slice; the slices are now single-idea commits inside the milestone's PR. `CLAUDE.md` and SPEC.md updated.
+- **Additions to the `list_*` tools** (M3). `list_providers` also lists providers that aren't enabled or built yet (with how to enable them), gives estimates for a square `draft` and `final`, and notes when a paid provider behind a free one is only used by name. `list_images` also returns the sidecar path, model, quality, aspect ratio, size, and seed (so a draft can be rendered as final later), plus `total` and `unreadable` counts. `ImageProvider` gained a `model` field so `list_providers` can name models before anything is generated.
 - **The first paid provider is OpenAI, and it is now the cheaper one** (decided Oct 2, 2026, start of M2). Checked today: `gpt-image-2.5-flare` bills $30/M image output tokens, roughly $0.006 (low) to $0.05 (high) per 1024² image, and accepts any size in multiples of 16. Gemini 3.1 Flash Image is $0.045–$0.067 per image, and its Lite variant is $0.034 at 1K only. The spec called Gemini "cheapest"; SPEC.md's provider table was updated in PR #5 after review.
 - **OpenAI `draft` isn't 0.25MP** (M2). OpenAI's minimum image is 655,360 pixels, so `draft` renders at the smallest allowed size (816×816 at 1:1) at `low` quality; `final` uses the shared 1MP sizes at `medium` (Matt chose `medium` over `high` after the benchmark: `high` cost ~10× `low` for little visible gain). The spec allows per-provider tier mappings; this one is documented in the README, SPEC, and the tool's `quality` description.
 - **Paid-provider rates live in code, not env vars** (M2). SPEC said prices "live in config". The model is configurable (`DARKROOM_OPENAI_MODEL`), but per-token rates are a one-line-per-model table at the top of `openai.ts`, and an unknown model fails startup. Env vars for rates would let a typo silently under-reserve against the cap. SPEC.md updated.
@@ -68,6 +80,44 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - License: `package.json` says `UNLICENSED` for now. Pick one before publishing in M4.
 
 ## Log
+
+### Oct 3, 2026 (UTC) — M3 done (tagged `m3`)
+
+Matt approved and PR #7 was merged (merge commit) after the review fixes. Spend for M3: $0.0104 (two OpenAI drafts during acceptance).
+
+### Oct 3, 2026 (UTC) — review of PR #7
+
+A multi-model review of `2ecc14e` posted 4 Low findings inline (nothing Medium or High). All fixed, with a failing test first where code changed:
+
+- **A1:** `list_providers` kept its own provider-to-key-variable table, against the spec's "no provider-specific logic in tools". The map moved to `config.ts` (`API_KEY_VARS`), with a test that it matches `PAID_PROVIDERS` and the variables `loadConfig` reads.
+- **B5:** `list_images` counted every read failure as `unreadable` without a trace. A broken sidecar or missing PNG stays quiet; other errors (e.g. EISDIR, EACCES) are now logged to stderr.
+- **A2, A7:** a schema description and a test title that no longer matched the code.
+
+Each comment has an inline reply. `npm run check`: 276 tests.
+
+### Oct 3, 2026 (UTC) — M3 built and accepted; awaiting review
+
+#### Build notes
+
+Built: router fallback on failure (the paid gate covers failures as well as skips; refusals, cancels, and explicit providers never fall back), a 60s cache of healthy results, `model` on `ImageProvider`, `list_providers`, `list_images`, README sections for both tools and for fallback. One PR for the milestone, per the new rule in `CLAUDE.md`.
+
+Process notes: `CLAUDE.md` now says one PR per milestone (Matt, start of M3). An `npx prettier` run reformatted the tree mid-M3; it was caught before pushing, the branch was rebuilt without it, and `CLAUDE.md` now says the repo has no formatter. `SPEC.md` now says Gemini gets M2's cost benchmark when it lands after v1 (Matt asked for real Gemini costs).
+
+**Acceptance run** (built `dist/`; each case a fresh headless `claude -p` with `--strict-mcp-config`, a scratch MCP config with `DARKROOM_PROVIDER_ORDER=comfyui,openai`, and only the three Darkroom tools allowed; key from the Keychain through the environment only; prompt "a red bicycle leaning against a brick wall", 1:1 draft, no `provider`):
+
+1. **ComfyUI stopped, flag off.** `list_providers`: comfyui `healthy: false` ("Can't reach ComfyUI at http://127.0.0.1:8188 (ECONNREFUSED)…"); openai `healthy: true` with "Used only when asked for by name: comfyui comes first, and DARKROOM_ALLOW_PAID_FALLBACK is off."; spend $0 of $2. `generate_image` returned: `No image provider could take this request (comfyui: unhealthy: Can't reach ComfyUI at http://127.0.0.1:8188 (ECONNREFUSED). Is it running? Set COMFYUI_URL if it isn't at that address.; openai: not used because comfyui was skipped and this provider costs money; DARKROOM_ALLOW_PAID_FALLBACK=true allows this).` **Pass.**
+2. **ComfyUI stopped, `DARKROOM_ALLOW_PAID_FALLBACK=true`.** Served by `openai` / `gpt-image-2.5-flare`, 816×816, 9.4 s, **$0.0052** actual; `skipped_providers` listed comfyui as unhealthy with the same reason. Claude described the preview correctly. `list_providers` then showed $0.0052 spent, $1.9948 remaining. **Pass.**
+3. **Generic `OPENAI_API_KEY` only** (the real key, under the generic name; no `DARKROOM_OPENAI_API_KEY`), flag still on. Both the default call and `provider: "openai"` were refused: `openai: unhealthy: DARKROOM_OPENAI_API_KEY is not set. Darkroom ignores a generic OPENAI_API_KEY on purpose, so a key in your shell never spends money by itself`. Spend unchanged. **Pass.**
+4. **Extra: failure fallback against a real provider.** ComfyUI running, `COMFYUI_TIMEOUT_MS=15000`, flag on. ComfyUI took the job, timed out, and was interrupted (its log: "Interrupting prompt …", "Processing interrupted"; `/queue` empty right after), then the request went to openai ($0.0052) with `skipped_providers: [{"provider":"comfyui","reason":"failed: ComfyUI didn't finish within 15s (COMFYUI_TIMEOUT_MS, which includes time waiting in ComfyUI's queue). The job was cancelled."}]`. `list_images` (limit 3) listed both new images and the previous comfyui render newest first, 20 total, 0 unreadable. ComfyUI stopped afterward. **Pass.**
+
+`list_images` against the real `~/.darkroom/images` (M0–M2 sidecars): 18 images, 0 unreadable.
+
+**Spend:** two OpenAI drafts, **$0.0104** in the ledger for 2026-10-03 (UTC).
+
+**Findings:**
+
+- With the fallback flag on, Claude volunteered the cost trade-off unprompted ("draft requests will keep going to OpenAI and costing money while ComfyUI is down"), from `skipped_providers` and `list_providers`.
+- `--allowedTools` takes a variable number of arguments, so the prompt for `claude -p` has to come before it.
 
 ### Oct 2, 2026 — M2 done (tagged `m2`)
 

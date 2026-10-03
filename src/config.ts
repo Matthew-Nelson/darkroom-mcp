@@ -12,6 +12,13 @@ export type ProviderName = (typeof PROVIDER_NAMES)[number];
 // contract suite checks each built provider's `isPaid` against this list.
 export const PAID_PROVIDERS: ReadonlySet<ProviderName> = new Set(["openai", "gemini"]);
 
+// The Darkroom-specific key each paid provider needs (besides a place in the order),
+// so list_providers can say how to enable one. A test checks these are the variables read below.
+export const API_KEY_VARS: Readonly<Partial<Record<ProviderName, string>>> = {
+  openai: "DARKROOM_OPENAI_API_KEY",
+  gemini: "DARKROOM_GEMINI_API_KEY",
+};
+
 export interface Config {
   outputDir: string;
   providerOrder: ProviderName[];

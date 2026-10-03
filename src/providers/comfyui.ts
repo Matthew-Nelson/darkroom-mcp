@@ -146,6 +146,7 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
 
   return {
     name: "comfyui",
+    model: mapping.model,
     isPaid: false,
     supports: { negativePrompt: mapping.inputs.negativePrompt !== undefined, seed: true },
     estimateCostUsd: () => 0,

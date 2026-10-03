@@ -86,6 +86,7 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
 
   return {
     name: "openai",
+    model,
     isPaid: true,
     supports: { negativePrompt: false, seed: false },
     estimateCostUsd,
