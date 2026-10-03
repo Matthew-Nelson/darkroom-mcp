@@ -37,10 +37,11 @@ export class ConfigError extends Error {
 }
 
 // Empty strings count as unset: `claude mcp add -e FOO=` and blank .env lines are common.
-const optional = <T extends z.ZodType>(schema: T) =>
+// The schemas exported below are reused by the eval's own variables (eval/eval.ts).
+export const optional = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), schema.optional());
 
-const outputDir = z
+export const outputDir = z
   .string()
   .transform((p) => (p === "~" || p.startsWith("~/") ? join(homedir(), p.slice(1)) : p))
   .refine(isAbsolute, "must be an absolute path (relative paths depend on the client's working directory)")
@@ -57,7 +58,7 @@ const providerOrder = z
   );
 
 // zod rejects NaN and Infinity as invalid numbers.
-const usd = z.coerce.number({ error: "must be a number" }).min(0, "must be zero or more");
+export const usd = z.coerce.number({ error: "must be a number" }).min(0, "must be zero or more");
 
 const bool = z.enum(["true", "false"], { error: 'must be "true" or "false"' }).transform((v) => v === "true");
 

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "bakery-sign",
+    "category": "text",
+    "aspect_ratio": "3:2",
+    "prompt": "a hand-painted wooden sign outside a bakery that reads FRESH BREAD DAILY, warm afternoon light"
+  },
+  {
+    "id": "concert-poster",
+    "category": "text",
+    "aspect_ratio": "2:3",
+    "prompt": "a minimalist concert poster with the words NIGHT SHIFT in bold sans-serif type, deep blue and orange"
+  },
+  {
+    "id": "honey-jar",
+    "category": "text",
+    "aspect_ratio": "1:1",
+    "prompt": "a glass jar of honey with a kraft paper label that reads WILD CLOVER, on a kitchen counter"
+  },
+  {
+    "id": "fisherman-portrait",
+    "category": "people",
+    "aspect_ratio": "2:3",
+    "prompt": "a portrait of an elderly fisherman with a weathered face and a knit cap, overcast harbor behind him, 85mm photo"
+  },
+  {
+    "id": "cafe-friends",
+    "category": "people",
+    "aspect_ratio": "3:2",
+    "prompt": "three friends laughing around a small cafe table, holding coffee cups, candid street photography, natural light"
+  },
+  {
+    "id": "running-shoes",
+    "category": "object",
+    "aspect_ratio": "1:1",
+    "prompt": "a pair of white running shoes on a pale gray background, studio product photo, soft shadow"
+  },
+  {
+    "id": "camera-knolling",
+    "category": "object",
+    "aspect_ratio": "3:2",
+    "prompt": "a vintage film camera taken apart, its parts laid out neatly in rows on a green cutting mat, top-down photo"
+  },
+  {
+    "id": "aperture-icon",
+    "category": "icon",
+    "aspect_ratio": "1:1",
+    "prompt": "a flat app icon of a camera aperture, rounded square, purple-to-orange gradient, no text"
+  },
+  {
+    "id": "forest-road",
+    "category": "scene",
+    "aspect_ratio": "16:9",
+    "prompt": "a misty pine forest at dawn with a winding dirt road, cinematic wide shot"
+  },
+  {
+    "id": "rainy-street",
+    "category": "scene",
+    "aspect_ratio": "9:16",
+    "prompt": "a rainy neon-lit street in Tokyo at night, reflections on wet pavement, a lone figure with an umbrella"
+  }
+]
