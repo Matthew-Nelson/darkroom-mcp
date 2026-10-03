@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M4 — Ship it · status: in progress
+## Current: M4 — Ship it · status: awaiting review (GIF pending)
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 ## Next up
 
 - Matt records the demo GIF; trim and convert it, add it to the README.
-- Open the M4 PR.
+- PR #8 is open for review.
 
 ## Deviations from spec
 
