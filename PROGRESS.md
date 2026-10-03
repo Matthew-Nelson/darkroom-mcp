@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M5 (Gemini provider) awaiting review
+## Current: M5 done (Gemini provider, tagged `m5`) · Phase 2 not started
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -11,7 +11,7 @@
 | M2: Ledger + first paid provider | done | `m2` |
 | M3: Router and guardrails | done | `m3` |
 | M4: Ship it | done | `m4` |
-| M5: Gemini provider | awaiting review | — |
+| M5: Gemini provider | done | `m5` |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
 
@@ -67,12 +67,12 @@ Done when (agreed with Matt, Oct 3, 2026):
 - [x] With order `comfyui,gemini` and ComfyUI stopped: refused by default, falls back to Gemini only with `DARKROOM_ALLOW_PAID_FALLBACK=true`
 - [x] A Gemini request over the cap is refused
 - [x] Cost benchmark and eval recorded; costs compared with list price and OpenAI; estimates calibrated
-- [ ] Matt approved and merged the PR
-- [ ] Tagged `m5`
+- [x] Matt approved and merged PR #10 (after a multi-model review; all 5 findings fixed)
+- [x] Tagged `m5`
 
 ## Next up
 
-- M5 is built, accepted, and documented; the PR awaits Matt's review. After approval: the "Mark M5 done" commit, then tag `m5` once merged.
+- M5 is done. Next steps wait for Matt's go-ahead: the M1 review's unaddressed Lows (cancel path), the Flux schnell template (optional), the demo GIF, the npm publish decision, then Phase 2.
 - Check Google's billing report for Oct 3 (UTC) once it updates: it should show about $1.22. Much more would mean the unlabeled output tokens are billed at the image rate (see the M5 log).
 
 ## Deviations from spec
@@ -114,6 +114,10 @@ Done when (agreed with Matt, Oct 3, 2026):
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 3, 2026 (UTC) — M5 done (tagged `m5`)
+
+Matt approved and PR #10 was merged (merge commit) after the review fixes. Spend for M5: about $1.22 on Gemini plus $0.0037 on OpenAI, within the agreed $1.50.
 
 ### Oct 3, 2026 (UTC) — review of PR #10
 
