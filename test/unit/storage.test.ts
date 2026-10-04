@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import sharp from "sharp";
@@ -159,6 +159,42 @@ describe("Storage.find", () => {
     ["a missing image", "a-mug-0123abcd.png", /No image at/],
   ])("refuses %s", async (_, ref, message) => {
     await expect(storage.find(ref)).rejects.toThrow(message);
+  });
+
+  it("refuses a filename once the output folder is swapped for a symlink, as it does a path (review C6)", async () => {
+    const saved = await storage.save("a mug", Buffer.from("png"), {});
+    const elsewhere = await mkdtemp(join(tmpdir(), "darkroom-elsewhere-"));
+    try {
+      await rename(storage.root, `${storage.root}-moved`);
+      await symlink(elsewhere, storage.root);
+      await writeFile(join(elsewhere, basename(saved.pngPath)), "other png");
+      await writeFile(join(elsewhere, basename(saved.sidecarPath)), "{}");
+      await expect(storage.find(basename(saved.pngPath))).rejects.toThrow(StorageError);
+      await expect(storage.find(saved.pngPath)).rejects.toThrow(StorageError);
+    } finally {
+      await rm(storage.root, { force: true });
+      await rename(`${storage.root}-moved`, storage.root);
+      await rm(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  it("says there's no image when a path runs through a file, not a raw ENOTDIR (review C5)", async () => {
+    const file = join(dir, "not-a-folder");
+    await writeFile(file, "x");
+    // The folder part runs through the file, which is what makes realpath fail with ENOTDIR.
+    const ref = join(file, "inner", "a-mug-0123abcd.png");
+    await expect(storage.find(ref)).rejects.toThrow(new StorageError(`No image at ${ref}.`));
+  });
+
+  it.skipIf(process.getuid?.() === 0)("turns a permission error on the path into a StorageError (review C5)", async () => {
+    const locked = join(dir, "locked");
+    await mkdir(locked);
+    await chmod(locked, 0o000);
+    try {
+      await expect(storage.find(join(locked, "inner", "a-mug-0123abcd.png"))).rejects.toThrow(StorageError);
+    } finally {
+      await chmod(locked, 0o755);
+    }
   });
 
   it("refuses an image whose sidecar is gone", async () => {

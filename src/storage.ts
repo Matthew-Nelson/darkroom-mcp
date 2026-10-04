@@ -99,6 +99,8 @@ export class Storage {
    * save() could have written, directly in the output directory, are found.
    */
   async find(ref: string): Promise<SavedImage> {
+    // A filename is joined onto the root, so the root must still be the folder pinned at startup.
+    await this.checkRoot();
     const name = basename(ref);
     if (name !== ref) {
       if (!isAbsolute(ref)) {
@@ -108,8 +110,10 @@ export class Storage {
       try {
         dir = await realpath(dirname(ref));
       } catch (err) {
-        if (!isErrno(err, "ENOENT")) throw err;
-        throw new StorageError(`No image at ${ref}.`);
+        if (isErrno(err, "ENOENT") || isErrno(err, "ENOTDIR")) throw new StorageError(`No image at ${ref}.`);
+        // Any other failure (permissions, say) still means it can't be shown to be the output folder.
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new StorageError(`Can't check that ${ref} is in Darkroom's output folder: ${reason}`);
       }
       if (dir !== this.root) throw new StorageError(`${ref} isn't in Darkroom's output folder (${this.root}).`);
     }
