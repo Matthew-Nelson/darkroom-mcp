@@ -6,8 +6,9 @@ import sharp from "sharp";
 
 const MAX_SLUG_LENGTH = 60;
 
-// What save() names a PNG: a slug, a hyphen, and 8 hex digits.
+// What save() names a PNG and its sidecar: a slug, a hyphen, and 8 hex digits.
 const IMAGE_NAME = /^[a-z0-9-]+-[0-9a-f]{8}\.png$/;
+export const SIDECAR_NAME = /^[a-z0-9-]+-[0-9a-f]{8}\.json$/;
 export const PREVIEW_MAX_EDGE = 768;
 
 export class StorageError extends Error {

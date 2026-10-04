@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -98,6 +98,16 @@ describe("listImages", () => {
 
   it("is empty for an empty folder", async () => {
     expect(await listImages(dir, { limit: 20 })).toEqual({ images: [], total: 0, unreadable: 0 });
+  });
+
+  it("lists only names save() writes, so every listed path is one save_alt_text and check_contrast accept (review C4)", async () => {
+    const stem = await saved({ at: "2026-10-02T10:00:00.000Z" });
+    await rename(join(dir, `${stem}.json`), join(dir, "My_Photo-abcdef12.json"));
+    await rename(join(dir, `${stem}.png`), join(dir, "My_Photo-abcdef12.png"));
+    await saved({ at: "2026-10-02T11:00:00.000Z", prompt: "kept" });
+    const out = await listImages(dir, { limit: 20 });
+    expect(out.images.map((i) => i.prompt)).toEqual(["kept"]);
+    expect(out).toMatchObject({ total: 1, unreadable: 0 });
   });
 
   it("ignores the spend ledger and its temp files", async () => {

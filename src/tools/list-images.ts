@@ -6,14 +6,12 @@ import { z } from "zod";
 import { PROVIDER_NAMES, type ProviderName } from "../config.js";
 import { formatUsd } from "../ledger.js";
 import { log } from "../log.js";
-import { isErrno, type Storage } from "../storage.js";
+import { isErrno, SIDECAR_NAME, type Storage } from "../storage.js";
 
 const DESCRIPTION = `List recently generated images, newest first, from the metadata saved next to each one: file path, prompt, provider, model, size, seed, cost, and alt text (if saved with save_alt_text).
 
 Use this when the user refers to an earlier image ("the lighthouse from before") or asks what has been generated. To render an earlier draft as final, pass its prompt and seed back to generate_image. It reads files only; it generates nothing and costs nothing.`;
 
-// Storage names every sidecar `<slug>-<8 hex>.json`; this skips the spend ledger and anything else.
-const SIDECAR_NAME = /^.+-[0-9a-f]{8}\.json$/;
 
 // Files are read a few at a time, so a big folder can't exhaust file handles.
 const READ_BATCH = 64;
@@ -61,6 +59,7 @@ type Output = { [K in keyof typeof outputSchema]: z.infer<(typeof outputSchema)[
 type Image = z.infer<typeof imageSchema>;
 
 export async function listImages(root: string, opts: { limit: number; provider?: ProviderName | undefined }): Promise<Output> {
+  // Only names save() writes: skips the spend ledger, temp files, and anything save_alt_text or check_contrast would refuse.
   const names = (await readdir(root)).filter((name) => SIDECAR_NAME.test(name));
   const read = await inBatches(names, (name) => readImage(root, name));
   const images = read.filter((i): i is Image => i !== undefined);
