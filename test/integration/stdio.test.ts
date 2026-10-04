@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -72,6 +72,7 @@ describe("darkroom over stdio", () => {
       "provider",
       "seed",
       "filename",
+      "reference_image",
     ]);
     expect(tool?.outputSchema?.properties).toHaveProperty("path");
   });
@@ -108,6 +109,7 @@ describe("darkroom over stdio", () => {
       cost_usd: 0,
       cost_is_estimate: false,
       ignored_params: ["negative_prompt"],
+      reference_image: null,
       skipped_providers: [],
     });
     expect(out.latency_ms).toEqual(expect.any(Number));
@@ -156,6 +158,44 @@ describe("darkroom over stdio", () => {
     const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
     const out = (await call(c, { prompt: "hello" })).structuredContent as Record<string, unknown>;
     expect([out.width, out.height]).toEqual([512, 512]);
+  });
+
+  it("bases an image on a reference: matches its shape, records it, and accepts an earlier image by filename", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
+    const photo = join(outputDir, "..", `${basename(outputDir)}-photo.jpg`);
+    await sharp({ create: { width: 1600, height: 900, channels: 3, background: "#cc3333" } }).jpeg().toFile(photo);
+    const real = await realpath(photo); // what the result reports (the temp folder is behind a symlink on macOS)
+    try {
+      const result = await call(c, { prompt: "the same scene at night", reference_image: photo });
+      expect(result.isError).toBeFalsy();
+      const out = result.structuredContent as Record<string, unknown>;
+      expect(out).toMatchObject({ provider: "mock", width: 688, height: 384, reference_image: real });
+      const [, text] = result.content;
+      expect(text?.type === "text" && text.text).toContain(`Based on the reference image ${real}.`);
+
+      const sidecar = JSON.parse(await readFile(out.sidecar_path as string, "utf8")) as Record<string, unknown>;
+      expect(sidecar).toMatchObject({
+        request: { reference_image: photo, aspect_ratio: "16:9" },
+        reference_image: real,
+        reference: { format: "jpeg", width: 1600, height: 900 },
+      });
+      expect((sidecar.reference as { sha256: string }).sha256).toMatch(/^[0-9a-f]{64}$/);
+
+      // An explicit aspect ratio wins, and an earlier Darkroom image can be named by its filename.
+      const byName = basename(out.path as string);
+      const again = await call(c, { prompt: "square", reference_image: byName, aspect_ratio: "1:1" });
+      expect(again.structuredContent).toMatchObject({ width: 512, height: 512, reference_image: out.path });
+    } finally {
+      await rm(photo, { force: true });
+    }
+  });
+
+  it("refuses a reference that isn't an image before calling any provider", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
+    const result = await call(c, { prompt: "x", reference_image: join(outputDir, "missing.png") });
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    expect(block?.type === "text" && block.text).toMatch(/^Couldn't use the reference image: No file at /);
   });
 
   it("rejects invalid input through the schema", async () => {

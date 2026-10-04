@@ -105,3 +105,39 @@ describe("seedColor", () => {
     expect(seedColor(42)).toMatch(/^#[0-9a-f]{6}$/);
   });
 });
+
+describe("mock provider with a reference image", () => {
+  const mock = createMockProvider();
+  const half = async (left: string, right: string) => {
+    const side = { width: 400, height: 400, channels: 3 as const };
+    const png = await sharp({ create: { ...side, width: 800, background: left } })
+      .composite([{ input: await sharp({ create: { ...side, background: right } }).png().toBuffer(), left: 400, top: 0 }])
+      .png()
+      .toBuffer();
+    return { png, width: 800, height: 400 };
+  };
+
+  it("says it can use one", () => {
+    expect(mock.supports.referenceImage).toBe(true);
+  });
+
+  it("draws the reference, cropped to the requested shape, under the text", async () => {
+    // Red left half, blue right half; a square crop keeps the middle, so both show.
+    const referenceImage = await half("#ff0000", "#0000ff");
+    const result = await mock.generate(request({ referenceImage }), signal);
+    expect([result.width, result.height]).toEqual([512, 512]);
+    const { data } = await sharp(result.png).resize(2, 2, { fit: "fill" }).raw().toBuffer({ resolveWithObject: true });
+    const [r1, , b1] = [...data.subarray(0, 3)] as [number, number, number]; // top-left
+    const [r2, , b2] = [...data.subarray(3, 6)] as [number, number, number]; // top-right
+    expect(r1).toBeGreaterThan(b1); // still reddish under the darkening
+    expect(b2).toBeGreaterThan(r2);
+  });
+
+  it("flattens a transparent reference onto its seed color", async () => {
+    const clear = { r: 0, g: 0, b: 0, alpha: 0 };
+    const png = await sharp({ create: { width: 200, height: 200, channels: 4, background: clear } }).png().toBuffer();
+    const result = await mock.generate(request({ referenceImage: { png, width: 200, height: 200 } }), signal);
+    const meta = await sharp(result.png).metadata();
+    expect([meta.format, meta.width, meta.hasAlpha]).toEqual(["png", 512, false]);
+  });
+});
