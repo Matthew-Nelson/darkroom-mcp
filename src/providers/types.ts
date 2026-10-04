@@ -4,12 +4,21 @@ export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 export const QUALITIES = ["draft", "final"] as const;
 export type Quality = (typeof QUALITIES)[number];
 
+// An image the result should be based on, already decoded, turned upright, and
+// re-encoded as PNG (see src/reference-image.ts), so providers never see the raw file.
+export interface ReferenceImage {
+  png: Buffer;
+  width: number;
+  height: number;
+}
+
 export interface GenerateRequest {
   prompt: string;
   negativePrompt?: string;
   aspectRatio: AspectRatio;
   quality: Quality;
   seed?: number;
+  referenceImage?: ReferenceImage;
 }
 
 export interface GenerateResult {
