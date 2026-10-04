@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M5 done (Gemini provider, tagged `m5`) · Phase 2 not started
+## Current: M5 done (Gemini provider, tagged `m5`) · repo public, tagged `v0.1.0` · Phase 2 not started
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -73,7 +73,6 @@ Done when (agreed with Matt, Oct 3, 2026):
 ## Next up
 
 - M5 is done. Next steps wait for Matt's go-ahead: the M1 review's unaddressed Lows (cancel path), the Flux schnell template (optional), the demo GIF, then Phase 2.
-- Going public (`chore/go-public`): once that PR merges, make the repo public, then turn on branch protection for `main` (PR plus passing CI), secret scanning with push protection, private vulnerability reporting, and Dependabot alerts.
 - Check Google's billing report for Oct 3 (UTC) once it updates: it should show about $1.22. Much more would mean the unlabeled output tokens are billed at the image rate (see the M5 log).
 
 ## Deviations from spec
@@ -116,6 +115,15 @@ Done when (agreed with Matt, Oct 3, 2026):
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 4, 2026 (UTC) — repo made public
+
+Matt approved; PR #11 merged (`9ec5dd7`) and tagged `v0.1.0`. Then:
+
+- Repo visibility set to public; topics added (`mcp`, `model-context-protocol`, `claude-code`, `image-generation`, `comfyui`, `typescript`).
+- Branch protection on `main`: a PR and passing CI (`check (22)`, `check (24)`) required, no approvals required (solo repo), applies to admins too, no force-pushes or deletion.
+- Turned on private vulnerability reporting (`SECURITY.md` links to it), Dependabot alerts (security updates came on with them), and secret scanning with push protection.
+- Secret scanning's first pass raised 2 "Google API Key" alerts, both fake keys in unit tests (`test/unit/gemini.test.ts:10`, `test/unit/paid-api.test.ts:12`); resolved as "used in tests". Push protection may block a future commit that adds a realistic-looking fake key; make fakes obviously fake (like `AIza-test-not-a-real-key`). Dependabot: 0 alerts.
 
 ### Oct 4, 2026 (UTC) — review of PR #11 (go public)
 
