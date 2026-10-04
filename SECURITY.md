@@ -4,7 +4,7 @@ Darkroom is a portfolio project, maintained on a best-effort basis. Only the lat
 
 ## Reporting a problem
 
-Please report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/Matthew-Nelson/darkroom-mcp/security/advisories/new), not in a public issue.
+Please report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/Matthew-Nelson/darkroom-mcp/security/advisories/new), not in a public issue. If that link doesn't work, open an issue that asks for a private contact, with no details of the problem.
 
 Things worth reporting:
 
