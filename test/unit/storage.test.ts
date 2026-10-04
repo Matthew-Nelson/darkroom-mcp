@@ -1,6 +1,6 @@
-import { mkdtemp, readdir, readFile, rename, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertInside, makePreview, slugify, Storage, StorageError } from "../../src/storage.js";
@@ -117,6 +117,127 @@ describe("Storage", () => {
     await symlink(elsewhere, out);
     await expect(storage.save("x", png, {})).rejects.toThrow(StorageError);
     expect(await readdir(elsewhere)).toEqual([]);
+  });
+});
+
+describe("Storage.find", () => {
+  let dir: string;
+  let storage: Storage;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "darkroom-find-"));
+    storage = await Storage.open(dir);
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("finds an image by its absolute path or its filename", async () => {
+    const saved = await storage.save("a mug", Buffer.from("png"), {});
+    expect(await storage.find(saved.pngPath)).toEqual(saved);
+    expect(await storage.find(basename(saved.pngPath))).toEqual(saved);
+  });
+
+  it("finds an image through a symlinked path to the output folder", async () => {
+    const saved = await storage.save("a mug", Buffer.from("png"), {});
+    const link = join(await mkdtemp(join(tmpdir(), "darkroom-link-")), "out");
+    await symlink(dir, link);
+    try {
+      expect(await storage.find(join(link, basename(saved.pngPath)))).toEqual(saved);
+    } finally {
+      await rm(dirname(link), { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["a relative path", "out/a-mug-0123abcd.png", /absolute path or just its filename/],
+    ["a path outside the output folder", "/etc/a-mug-0123abcd.png", /isn't in Darkroom's output folder/],
+    ["a folder that doesn't exist", "/no/such/dir/a-mug-0123abcd.png", /No image at/],
+    ["a traversal", "../a-mug-0123abcd.png", /absolute path or just its filename/],
+    ["a name save() never writes", "passwd", /isn't a Darkroom image name/],
+    ["the sidecar's name", "a-mug-0123abcd.json", /isn't a Darkroom image name/],
+    ["the spend ledger", "spend-ledger.json", /isn't a Darkroom image name/],
+    ["a missing image", "a-mug-0123abcd.png", /No image at/],
+  ])("refuses %s", async (_, ref, message) => {
+    await expect(storage.find(ref)).rejects.toThrow(message);
+  });
+
+  it("refuses an image whose sidecar is gone", async () => {
+    const saved = await storage.save("a mug", Buffer.from("png"), {});
+    await rm(saved.sidecarPath);
+    await expect(storage.find(saved.pngPath)).rejects.toThrow(/No metadata sidecar at/);
+  });
+
+  it("refuses a symlink planted in the output folder", async () => {
+    const outside = join(await mkdtemp(join(tmpdir(), "darkroom-outside-")), "secret.png");
+    await writeFile(outside, "secret");
+    await symlink(outside, join(dir, "evil-0123abcd.png"));
+    await writeFile(join(dir, "evil-0123abcd.json"), "{}");
+    try {
+      await expect(storage.find("evil-0123abcd.png")).rejects.toThrow(/No image at/);
+    } finally {
+      await rm(dirname(outside), { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a folder named like an image", async () => {
+    await mkdir(join(dir, "odd-0123abcd.png"));
+    await writeFile(join(dir, "odd-0123abcd.json"), "{}");
+    await expect(storage.find("odd-0123abcd.png")).rejects.toThrow(/No image at/);
+  });
+});
+
+describe("Storage.updateSidecar", () => {
+  let dir: string;
+  let storage: Storage;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "darkroom-update-"));
+    storage = await Storage.open(dir);
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const read = async (path: string) => JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+
+  it("rewrites the sidecar, returns what it was, and leaves no temp file", async () => {
+    const saved = await storage.save("a mug", Buffer.from("png"), { provider: "mock" });
+    const before = await storage.updateSidecar(saved.sidecarPath, (s) => ({ ...s, alt_text: "A mug." }));
+    expect(before).toEqual({ image: basename(saved.pngPath), provider: "mock" });
+    expect(await read(saved.sidecarPath)).toEqual({ ...before, alt_text: "A mug." });
+    expect((await readdir(dir)).sort()).toEqual([basename(saved.sidecarPath), basename(saved.pngPath)].sort());
+  });
+
+  it("applies concurrent updates one after another, so none is lost", async () => {
+    const saved = await storage.save("a mug", Buffer.from("png"), {});
+    await Promise.all(
+      ["a", "b", "c", "d"].map((key) => storage.updateSidecar(saved.sidecarPath, (s) => ({ ...s, [key]: true }))),
+    );
+    expect(await read(saved.sidecarPath)).toMatchObject({ a: true, b: true, c: true, d: true });
+  });
+
+  it("keeps going after a failed update", async () => {
+    const saved = await storage.save("a mug", Buffer.from("png"), {});
+    const failing = storage.updateSidecar(saved.sidecarPath, () => {
+      throw new Error("boom");
+    });
+    const next = storage.updateSidecar(saved.sidecarPath, (s) => ({ ...s, ok: true }));
+    await expect(failing).rejects.toThrow("boom");
+    await next;
+    expect(await read(saved.sidecarPath)).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ["broken JSON", "{not json", /isn't valid JSON/],
+    ["a JSON array", "[]", /isn't a JSON object/],
+  ])("leaves %s untouched", async (_, content, message) => {
+    const path = join(storage.root, "x-0123abcd.json");
+    await writeFile(path, content);
+    await expect(storage.updateSidecar(path, (s) => s)).rejects.toThrow(message);
+    expect(await readFile(path, "utf8")).toBe(content);
+  });
+
+  it("refuses a path outside the output folder", async () => {
+    await expect(storage.updateSidecar("/etc/x-0123abcd.json", (s) => s)).rejects.toThrow(StorageError);
   });
 });
 
