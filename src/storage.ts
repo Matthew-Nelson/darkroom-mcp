@@ -204,7 +204,7 @@ export class Storage {
     }
     // If the output dir was swapped for a symlink since startup, its real path moves.
     if (real !== this.root) {
-      throw new StorageError(`Output directory ${this.root} now resolves elsewhere; refusing to write.`);
+      throw new StorageError(`Output directory ${this.root} now resolves elsewhere; refusing to use it.`);
     }
   }
 }

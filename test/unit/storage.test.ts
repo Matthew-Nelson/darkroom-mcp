@@ -169,7 +169,8 @@ describe("Storage.find", () => {
       await symlink(elsewhere, storage.root);
       await writeFile(join(elsewhere, basename(saved.pngPath)), "other png");
       await writeFile(join(elsewhere, basename(saved.sidecarPath)), "{}");
-      await expect(storage.find(basename(saved.pngPath))).rejects.toThrow(StorageError);
+      // check_contrast only reads, so the refusal mustn't talk about writing.
+      await expect(storage.find(basename(saved.pngPath))).rejects.toThrow(/resolves elsewhere; refusing to use it/);
       await expect(storage.find(saved.pngPath)).rejects.toThrow(StorageError);
     } finally {
       await rm(storage.root, { force: true });
