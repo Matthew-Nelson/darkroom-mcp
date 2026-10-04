@@ -1,6 +1,6 @@
 # Progress
 
-## Current: v1 + M5 done, repo public (`v0.1.0`) · Phase 2 roadmap set · next: cancel-path fix
+## Current: v1 + M5 done, repo public (`v0.1.0`) · Phase 2 roadmap set · cancel-path fix awaiting review
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -12,7 +12,7 @@
 | M3: Router and guardrails | done | `m3` |
 | M4: Ship it | done | `m4` |
 | M5: Gemini provider | done | `m5` |
-| Fix: ComfyUI cancel path (M1 review Lows) | not started | — |
+| Fix: ComfyUI cancel path (M1 review Lows) | awaiting review | — |
 | M6: Accessibility metadata | not started | `m6` |
 | M7: Image-to-image and editing | not started | `m7` |
 | Later: GitHub release | not scheduled | — |
@@ -78,7 +78,7 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short plan for Matt:
 
-1. **Fix: ComfyUI cancel path** (`fix/comfyui-cancel`): rebuild the M1 review's Low findings from the code, a failing test for each, then fix. Approved by Matt (Oct 4).
+1. **Fix: ComfyUI cancel path** (`fix/comfyui-cancel`): built, PR open, awaiting Matt's review.
 2. **M6: Accessibility metadata** (`m6/…`): `save_alt_text` and a WCAG contrast check.
 3. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`.
 4. **Later:** a GitHub release.
@@ -124,6 +124,12 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 4, 2026 (UTC) — ComfyUI cancel path fixed; awaiting review
+
+The M1 review's Low findings, rebuilt from the code: cancel and timeout errors were written before the cancel ran, so they always said the job "was cancelled" or "was stopped". That was wrong when ComfyUI couldn't be reached, when the cancel timed out, when it got an HTTP error (which counted as success), or when the job had already ended (including a cancel after ComfyUI finished, while Darkroom was fetching the image). The cancel now runs first and reports what it did (interrupted, dequeued before it started, already ended, or failed with the reason), and the message says that. A failed cancel says the job may still be running.
+
+Tests: 6 new unit tests (unreachable, HTTP 500, no answer, ended during the cancel, cancelled after ComfyUI finished, dequeued), written first and failing, plus 2 updated messages. `npm run check`: 359 tests. `npm run test:comfyui` against ComfyUI 0.38.0: 3 passed (draft 101s); the mid-sampling abort gave "Generation was cancelled. ComfyUI is stopping the job." and ComfyUI's log showed "Interrupting prompt …" and "Processing interrupted". Spend: $0.
 
 ### Oct 4, 2026 (UTC) — Gemini billing confirmed
 
