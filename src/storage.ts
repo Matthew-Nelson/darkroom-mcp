@@ -68,7 +68,7 @@ export class Storage {
    * files are created exclusively, which also refuses to follow a planted symlink.
    */
   async save(name: string, png: Buffer, metadata: Record<string, unknown>): Promise<SavedImage> {
-    await this.checkRoot();
+    await this.checkRoot({ create: true });
     const slug = slugify(name);
     for (let attempt = 0; attempt < 3; attempt++) {
       const stem = `${slug}-${randomBytes(4).toString("hex")}`;
@@ -101,7 +101,7 @@ export class Storage {
    */
   async find(ref: string): Promise<SavedImage> {
     // A filename is joined onto the root, so the root must still be the folder pinned at startup.
-    await this.checkRoot();
+    await this.checkRoot({ create: false });
     const name = basename(ref);
     if (name !== ref) {
       if (!isAbsolute(ref)) {
@@ -162,7 +162,7 @@ export class Storage {
     sidecarPath: string,
     update: (sidecar: Record<string, unknown>) => Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    await this.checkRoot();
+    await this.checkRoot({ create: true });
     assertInside(this.root, sidecarPath);
     if (!(await lstat(sidecarPath)).isFile()) throw new StorageError(`${sidecarPath} isn't a regular file.`);
     let before: unknown;
@@ -190,12 +190,14 @@ export class Storage {
     return sidecar;
   }
 
-  private async checkRoot(): Promise<void> {
+  private async checkRoot({ create }: { create: boolean }): Promise<void> {
     let real: string;
     try {
       real = await realpath(this.root);
     } catch (err) {
       if (!isErrno(err, "ENOENT")) throw err;
+      // A lookup only reads, so it reports the folder gone rather than making an empty one.
+      if (!create) throw new StorageError(`Darkroom's output folder ${this.root} doesn't exist.`);
       // Deleted while the server runs: recreate it rather than lose a (possibly paid) image.
       await mkdir(this.root, { recursive: true });
       real = await realpath(this.root);

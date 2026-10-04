@@ -178,6 +178,13 @@ describe("Storage.find", () => {
     }
   });
 
+  it("doesn't recreate a deleted output folder just to look an image up", async () => {
+    const images = await Storage.open(join(dir, "images"));
+    await rm(images.root, { recursive: true });
+    await expect(images.find("a-mug-0123abcd.png")).rejects.toThrow(/output folder .* doesn't exist/);
+    expect(await readdir(dir)).toEqual([]);
+  });
+
   it("says there's no image when a path runs through a file, not a raw ENOTDIR (review C5)", async () => {
     const file = join(dir, "not-a-folder");
     await writeFile(file, "x");
