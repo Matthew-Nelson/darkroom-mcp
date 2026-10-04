@@ -177,8 +177,10 @@ export class Storage {
     const sidecar = before as Record<string, unknown>;
     // Dot-prefixed with a .tmp suffix, so list_images never mistakes it for a sidecar.
     const tmpPath = join(this.root, `.${basename(sidecarPath)}.${randomBytes(4).toString("hex")}.tmp`);
-    await writeFile(tmpPath, `${JSON.stringify(update({ ...sidecar }), null, 2)}\n`, { flag: "wx" });
+    const json = `${JSON.stringify(update({ ...sidecar }), null, 2)}\n`;
     try {
+      // Inside the try: a write that fails partway (a full disk) has already created the temp file.
+      await writeFile(tmpPath, json, { flag: "wx" });
       await rename(tmpPath, sidecarPath);
     } catch (err) {
       await unlink(tmpPath).catch(() => undefined);
