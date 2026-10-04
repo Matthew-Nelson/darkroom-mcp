@@ -28,6 +28,7 @@ interface FakeOptions {
   rejectPrompt?: boolean;
   running?: boolean; // whether our job shows as running in /queue during cancel
   endsDuringCancel?: boolean; // the job reaches /history just as the cancel arrives
+  interruptLandsFast?: boolean; // the interrupted job is in /history by the time the cancel checks
   cancelFails?: "unreachable" | "http" | "hang"; // what POST /queue does during cancel
   cancelDelayMs?: number; // how long POST /queue takes to answer
   pending?: "once" | "always"; // our job shows as pending in /queue: until the second delete, or for good
@@ -46,6 +47,7 @@ function fakeComfy(o: FakeOptions = {}) {
   let polls = 0;
   let cancelling = false;
   let deletes = 0;
+  let interrupted = false;
   const sockets: FakeSocket[] = [];
 
   const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
@@ -100,9 +102,10 @@ function fakeComfy(o: FakeOptions = {}) {
       if (o.historyStatus && (!cancelling || o.historyFailsDuringCancel)) return json({}, o.historyStatus);
       polls++;
       const name = o.history === undefined ? "history-success.json" : o.history;
-      const ended = o.endsDuringCancel && cancelling;
+      const landed = o.interruptLandsFast && interrupted;
+      const ended = (o.endsDuringCancel && cancelling) || landed;
       if (!ended && (name === null || polls <= (o.pollsBeforeDone ?? 2))) return json({});
-      const entry = fixture(name ?? "history-success.json");
+      const entry = fixture(landed ? "history-interrupted.json" : (name ?? "history-success.json"));
       return json(rekey(entry, firstKey(entry), promptId));
     }
     if (path === "/view") return o.hangView ? hang(init?.signal) : Promise.resolve(new Response(viewPng));
@@ -111,7 +114,10 @@ function fakeComfy(o: FakeOptions = {}) {
       const pending = o.pending === "always" || (o.pending === "once" && deletes < 2);
       return json({ queue_running: o.running ? [item] : [], queue_pending: pending ? [item] : [] });
     }
-    if (method === "POST" && (path === "/queue" || path === "/interrupt")) return Promise.resolve(new Response(""));
+    if (method === "POST" && (path === "/queue" || path === "/interrupt")) {
+      if (path === "/interrupt") interrupted = true;
+      return Promise.resolve(new Response(""));
+    }
     if (path === "/system_stats") return json(fixture("system_stats.json"));
     if (path.startsWith("/object_info/")) {
       const cls = decodeURIComponent(path.slice("/object_info/".length));
@@ -311,6 +317,14 @@ describe("comfyui provider: cancellation and timeout", () => {
     const comfy = fakeComfy({ history: null, running: true, endsDuringCancel: true });
     await expect(comfy.provider().generate(request, abortSoon())).rejects.toThrow(
       "Generation was cancelled. The ComfyUI job ended just as Darkroom went to cancel it, so there was nothing to stop.",
+    );
+    expect(comfy.posted("/interrupt")).toHaveLength(1);
+  });
+
+  it("reports an interrupt that already shows in /history as the job stopping, not ending on its own", async () => {
+    const comfy = fakeComfy({ history: null, running: true, interruptLandsFast: true });
+    await expect(comfy.provider().generate(request, abortSoon())).rejects.toThrow(
+      "Generation was cancelled. ComfyUI is stopping the job.",
     );
     expect(comfy.posted("/interrupt")).toHaveLength(1);
   });

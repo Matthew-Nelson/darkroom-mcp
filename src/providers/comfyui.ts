@@ -111,8 +111,10 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
    * would stop whatever is running, which might be someone else's job.
    *
    * Never throws: it reports what it actually did, checking /history to tell a
-   * job it stopped from one that ended on its own first, and returns `failed`
-   * (with the reason) if ComfyUI errors or doesn't answer within cancelTimeoutMs.
+   * job it stopped from one that ended on its own first. It returns `failed`
+   * (with the reason) if the delete, the /queue read, or the interrupt errors or
+   * doesn't answer within cancelTimeoutMs. The /history checks are best effort:
+   * once the job is stopped, a failed check only makes the message less specific.
    */
   async function cancel(promptId: string): Promise<CancelOutcome> {
     const signal = AbortSignal.timeout(cancelTimeoutMs);
