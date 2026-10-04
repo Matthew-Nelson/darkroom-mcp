@@ -1,6 +1,6 @@
 # Progress
 
-## Current: v1 + M5 done, repo public (`v0.1.0`) · cancel-path fix done (PR #15) · next: M6, with Matt's go-ahead
+## Current: M6 done (accessibility metadata, tagged `m6`) · PR #16 (flaky test fix) awaiting review · next: M7, with a plan first
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -13,7 +13,7 @@
 | M4: Ship it | done | `m4` |
 | M5: Gemini provider | done | `m5` |
 | Fix: ComfyUI cancel path (M1 review Lows) | done | — |
-| M6: Accessibility metadata | not started | `m6` |
+| M6: Accessibility metadata | done | `m6` |
 | M7: Image-to-image and editing | not started | `m7` |
 | Later: GitHub release | not scheduled | — |
 
@@ -74,15 +74,28 @@ Done when (agreed with Matt, Oct 3, 2026):
 - [x] Matt approved and merged PR #10 (after a multi-model review; all 5 findings fixed)
 - [x] Tagged `m5`
 
+## M6 gates
+
+Done when (agreed with Matt, Oct 4, 2026; decisions in SPEC.md under "Phase 2 roadmap"):
+
+- [x] `npm run check` passes (445 tests, after review fixes)
+- [x] Claude generates an image, writes its alt text, and `list_images` shows it
+- [x] The contrast check gives the right ratios for known color pairs, and a sensible verdict for a real image
+- [x] Matt approved and merged PR #17 (after a multi-model review; all 6 findings and 3 follow-up nits fixed)
+- [x] Tagged `m6`
+
 ## Next up
 
 Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short plan for Matt:
 
-1. **M6: Accessibility metadata** (`m6/…`): `save_alt_text` and a WCAG contrast check.
-2. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`.
-3. **Later:** a GitHub release.
+1. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`. Starts with a short plan, including which providers skip or refuse a reference and the cost of the small paid benchmark.
+2. **Later:** a GitHub release.
 
 ## Deviations from spec
+
+- **Additions to `save_alt_text`** (M6). It also records `alt_text_updated_at` and returns `previous_alt_text`, so replacing alt text can be undone; that's also why it's annotated `destructiveHint: true`. Alt text is capped at 1,000 characters.
+- **The contrast verdict counts failing colors together** (Matt, Oct 4, 2026, after the M6 benchmark). Agreed at the start: pass only against every color covering at least 10%. The benchmark showed clustering can split one failing area (pines, 13% of a band) into colors under 10% each, which then didn't count. Now a text color fails when the colors it fails against cover 10% or more together; `worst_ratio` is the ratio where the lowest-contrast colors reach 10%.
+- **How dominant colors are found** (M6). SPEC said only "from sharp". The image (or region) is shrunk to 256px, bucketed at 5 bits per channel, grouped with weighted k-means (at most 6, seeded deterministically), and groups within 40 RGB units merged.
 
 - **Gemini became M5, in several commits** (Oct 3, 2026). SPEC planned it as one self-contained commit. The provider is still one new file plus one registry line, but it came with a shared-helpers refactor (`src/providers/paid-api.ts`), two config variables (`DARKROOM_GEMINI_MODEL`, `DARKROOM_GEMINI_TIMEOUT_MS`), and benchmark calibration as separate commits. SPEC.md updated.
 - **Gemini is the pricier paid provider** (M5). A Gemini `draft` ($0.046) costs more than an OpenAI square `final` ($0.0133); a Gemini `final` ($0.0685) costs about 5× as much. It's documented as the second paid option, not a cheaper one.
@@ -123,6 +136,58 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 4, 2026 (UTC) — M6 done (tagged `m6`)
+
+Matt approved, and PR #17 was merged (merge commit) after the review fixes. Spend for M6: $0 (mock, plus one local Z-Image render for the benchmark).
+
+### Oct 4, 2026 (UTC) — review of PR #17
+
+Multi-model review of `2ead1d9` (`reviews/pr17-2ead1d9.md`): 12 raised → 6 survived, all Low. All six fixed, each code fix test-first (every new test failed against `2ead1d9` for the reason given):
+
+- **C6:** `find()` didn't run `checkRoot()`, so a bare filename followed an output folder swapped for a symlink (an absolute path was refused). It now runs the same guard as `save()`.
+- **C5:** `find()` passed raw ENOTDIR/EACCES messages through. ENOTDIR now says "No image at …", and any other resolve failure is a `StorageError`. The review's example (`/etc/hosts/foo.png`) doesn't actually hit ENOTDIR, since `find()` resolves the folder part, so the test runs a path one level through a file.
+- **C1:** a sidecar write that failed partway left its `.tmp` file behind; the write is now inside the try that unlinks it. Tested with a mocked `writeFile` that creates the file, then fails with ENOSPC (`test/unit/storage-faults.test.ts`).
+- **C4:** `list_images` listed any `<anything>-<8 hex>.json`, so it could show paths `find()` refuses. Both now share `SIDECAR_NAME` from `storage.ts`. Every image in `~/.darkroom/images` matches.
+- **C3, C2:** the PR body still stated the old verdict rule and 438 tests; both updated (444 tests now).
+- **Follow-up nits** from re-checking the fixes: with C6, `find()` ran `checkRoot()`, which recreates a deleted output folder and refused with "refusing to write", odd for the read-only `check_contrast`. A lookup now reports the folder missing instead of creating it, and the message says "refusing to use it" (both test-first). Also dropped a stray blank line in `list-images.ts`. 445 tests.
+
+### Oct 4, 2026 (UTC) — M6 benchmark on a real Z-Image (asked for by Matt)
+
+`~/.darkroom/images/m6-benchmark-lake-hero-5cce5183.png`: ComfyUI, Z-Image Turbo, 16:9 `final` (1360×768), seed 20261004, 4m08s, $0, generated through this branch's build. The prompt asked for a misty mountain lake at sunrise, pines on the far shore, a red canoe on a pebble shore in the lower right, and a pastel sky in the upper third with room for a headline. Everything asked for is there; pines on the right also rise into the top-right corner, so the open sky is the left two-thirds.
+
+Alt text, written after looking at it and saved with `save_alt_text` (138 characters; `list_images` returns it): "A red canoe rests on a pebble shore beside a still, misty mountain lake at sunrise, with pine forest and a mountain under a pale peach sky."
+
+`check_contrast` with `#ffffff`, `#111111`, `#1f2a44`, checked against an independent per-pixel count (Pillow; the share of pixels where each color misses 4.5:1):
+
+| Region | White | `#111111` | `#1f2a44` | Per pixel, fails body text on |
+| --- | --- | --- | --- | --- |
+| Whole image | fail (1.51:1) | fail (1.22:1) | fail (1.08:1) | 47% / 54% / 57% |
+| Top-left sky `{0.03, 0.04, 0.6, 0.22}` | fail (1.54:1) | pass (12.19:1) | pass (9.2:1) | 100% / 0% / 0% |
+| Full-width top third | fail (1.5:1) | **pass (8.29:1)** | **pass (6.26:1)** | 87% / **13%** / **13%** |
+| Lower-left water | fail (1.88:1) | fail (1.35:1) | fail (1.02:1) | 55% / 46% / 52% |
+
+11 of 12 verdicts agree. **Gap found:** in the full-width top third, dark text passes, but it fails on 13% of the band (the top-right pines). The pines came back as two dark colors, 8% and 5%; each is under the 10% cutoff, so neither counted. The rule as built lets one failing area escape when clustering splits it. Matt chose to fail when the colors a text color fails against *together* cover 10% or more (rather than counting pixels). Fixed with a failing test first; rerun, all 12 verdicts now match the per-pixel count (dark text in the full-width top third fails at 2.79:1 against the pines, body and large).
+
+### Oct 4, 2026 (UTC) — M6 built and accepted; awaiting review
+
+Branch `m6/accessibility`. Matt chose, at the start: `check_contrast` as its own tool, images found by absolute path or filename, and a verdict judged against the worst color covering ≥10% of the area, with an optional region.
+
+Commits: find a saved image and rewrite its sidecar atomically (storage); `save_alt_text` and `alt_text` in `list_images`; WCAG 2.2 contrast math; dominant colors with sharp; `check_contrast`; README and SPEC.
+
+Acceptance:
+
+- **Alt text, end to end.** Headless `claude -p` (Claude Code 2.1.289) against this branch's `dist/`, `DARKROOM_PROVIDER_ORDER=mock`, a scratch output folder. Asked to generate a hero image of a mug, write and save its alt text, then report what `list_images` returned. Claude called `generate_image`, looked at the preview, saw it was a mock placeholder, and saved alt text describing what's actually there ("Placeholder graphic: a navy panel with white text describing a planned photo of a ceramic mug…") rather than the mug it asked for. `list_images` returned that text exactly; the sidecar on disk has `alt_text` and `alt_text_updated_at`. Cost $0 (mock).
+- **Known pairs.** Unit tests, cross-checked against an independent Python implementation: black/white 21:1, `#767676` 4.54 (passes body text), `#777777` 4.47 (fails), `#949494` 3.03 (passes large text), `#959595` 2.99 (fails), and others.
+- **A real image.** `check_contrast` over stdio on a Z-Image `final` (1248×832, a white mug by a window), text colors `#ffffff` and `#111111`:
+  - Whole image: both fail (worst 1.32:1 and 1.73:1). Six colors from near-white to dark wood; nothing reads on all of it.
+  - Window, top-left: one color `#d9e1d6`; dark text passes (14.1:1), white fails (1.33:1).
+  - Wall, top-right: `#504740` 99%; white passes (9.06:1), dark text fails (2.08:1).
+  - Desk, bottom strip: white fails (1.23:1, against sun-washed `#ebe7e2`, 38%); dark text fails body (4.22:1, against `#95704c`) but passes large.
+  - The wall and the desk strip looked wrong to me at first: the wall looks light grey next to the window, and the strip looks like all wood. Sampling pixels showed the tool was right: Pillow (in ComfyUI's venv) gives the wall a mean of `(81,72,65)` and the window `(217,225,214)`, matching the tool, and the left third of the strip is near-white `(235,232,228)`. The README now uses this as its example of why to measure rather than eyeball.
+- Inspector CLI (2.9.0) lists all five tools.
+
+Along the way: one `npm run check` failed on a timing-dependent ComfyUI cancel test from PR #15 (it passed alone and on rerun). It's fixed separately in PR #16 (`fix/comfyui-test-timing`, test-only). Commit `93d3901` (contrast math) went in during that failing run; its own tests passed, and the full suite passed on the next run. Mid-session, a stray `inspector --version` opened the Inspector web UI on Matt's machine; closed straight away.
 
 ### Oct 4, 2026 (UTC) — review of PR #15 (cancel path)
 

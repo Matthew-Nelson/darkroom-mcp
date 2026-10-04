@@ -6,14 +6,11 @@ import { z } from "zod";
 import { PROVIDER_NAMES, type ProviderName } from "../config.js";
 import { formatUsd } from "../ledger.js";
 import { log } from "../log.js";
-import { isErrno, type Storage } from "../storage.js";
+import { isErrno, SIDECAR_NAME, type Storage } from "../storage.js";
 
-const DESCRIPTION = `List recently generated images, newest first, from the metadata saved next to each one: file path, prompt, provider, model, size, seed, and cost.
+const DESCRIPTION = `List recently generated images, newest first, from the metadata saved next to each one: file path, prompt, provider, model, size, seed, cost, and alt text (if saved with save_alt_text).
 
 Use this when the user refers to an earlier image ("the lighthouse from before") or asks what has been generated. To render an earlier draft as final, pass its prompt and seed back to generate_image. It reads files only; it generates nothing and costs nothing.`;
-
-// Storage names every sidecar `<slug>-<8 hex>.json`; this skips the spend ledger and anything else.
-const SIDECAR_NAME = /^.+-[0-9a-f]{8}\.json$/;
 
 // Files are read a few at a time, so a big folder can't exhaust file handles.
 const READ_BATCH = 64;
@@ -28,6 +25,8 @@ const sidecarSchema = z.object({
   height: z.number(),
   seed: z.number().nullable(),
   cost_usd: z.number(),
+  // A hand-edited alt_text that isn't a string is dropped rather than hiding the image.
+  alt_text: z.string().optional().catch(undefined),
 });
 
 const imageSchema = z.object({
@@ -43,6 +42,7 @@ const imageSchema = z.object({
   height: z.number(),
   seed: z.number().nullable(),
   cost_usd: z.number(),
+  alt_text: z.string().nullable().describe("null until alt text is saved with save_alt_text"),
 });
 
 const outputSchema = {
@@ -58,6 +58,7 @@ type Output = { [K in keyof typeof outputSchema]: z.infer<(typeof outputSchema)[
 type Image = z.infer<typeof imageSchema>;
 
 export async function listImages(root: string, opts: { limit: number; provider?: ProviderName | undefined }): Promise<Output> {
+  // Only names save() writes: skips the spend ledger, temp files, and anything save_alt_text or check_contrast would refuse.
   const names = (await readdir(root)).filter((name) => SIDECAR_NAME.test(name));
   const read = await inBatches(names, (name) => readImage(root, name));
   const images = read.filter((i): i is Image => i !== undefined);
@@ -100,6 +101,7 @@ async function readImage(root: string, sidecarName: string): Promise<Image | und
     height: s.height,
     seed: s.seed,
     cost_usd: s.cost_usd,
+    alt_text: s.alt_text ?? null,
   };
 }
 
@@ -145,6 +147,7 @@ function summarize(o: Output): string {
   ];
   for (const i of o.images) {
     lines.push(`${i.created_at} · ${i.provider} · ${i.width}×${i.height} · ${formatUsd(i.cost_usd)} · ${i.path}\n  ${i.prompt}`);
+    if (i.alt_text !== null) lines.push(`  Alt text: ${i.alt_text}`);
   }
   if (o.unreadable > 0) lines.push(`Skipped ${o.unreadable} unreadable sidecar(s).`);
   return lines.join("\n");

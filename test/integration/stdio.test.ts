@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -51,10 +51,16 @@ async function call(c: Client, args: Record<string, unknown>): Promise<CallToolR
 }
 
 describe("darkroom over stdio", () => {
-  it("lists all three tools, and generate_image's input and output schemas", async () => {
+  it("lists all the tools, and generate_image's input and output schemas", async () => {
     const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
     const { tools } = await c.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["generate_image", "list_providers", "list_images"]);
+    expect(tools.map((t) => t.name)).toEqual([
+      "generate_image",
+      "list_providers",
+      "list_images",
+      "save_alt_text",
+      "check_contrast",
+    ]);
     const tool = tools[0];
     expect(tool?.description).toMatch(/only pass "provider" when the user explicitly asks/i);
     expect(tool?.inputSchema.required).toEqual(["prompt"]);
@@ -276,6 +282,80 @@ describe("darkroom over stdio", () => {
     expect((limited.structuredContent as { images: unknown[] }).images).toHaveLength(1);
     const filtered = (await c.callTool({ name: "list_images", arguments: { provider: "openai" } })) as CallToolResult;
     expect(filtered.structuredContent).toEqual({ images: [], total: 0, unreadable: 0 });
+  });
+
+  it("save_alt_text writes alt text that list_images then returns, and says what it replaced", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
+    const generated = (await call(c, { prompt: "a mug" })).structuredContent as { path: string; sidecar_path: string };
+    const save = async (image: string, altText: string) =>
+      (await c.callTool({ name: "save_alt_text", arguments: { image, alt_text: altText } })) as CallToolResult;
+
+    const first = await save(generated.path, "A plain grey placeholder.");
+    expect(first.isError).toBeFalsy();
+    expect(first.structuredContent).toEqual({
+      path: generated.path,
+      sidecar_path: generated.sidecar_path,
+      alt_text: "A plain grey placeholder.",
+      previous_alt_text: null,
+    });
+
+    // By filename this time, replacing the first.
+    const second = await save(basename(generated.path), "  A grey placeholder with the prompt in it.  ");
+    expect(second.structuredContent).toMatchObject({
+      alt_text: "A grey placeholder with the prompt in it.",
+      previous_alt_text: "A plain grey placeholder.",
+    });
+
+    const sidecar = JSON.parse(await readFile(generated.sidecar_path, "utf8")) as Record<string, unknown>;
+    expect(sidecar).toMatchObject({ provider: "mock", alt_text: "A grey placeholder with the prompt in it." });
+    expect(Date.parse(sidecar.alt_text_updated_at as string)).not.toBeNaN();
+
+    const listed = (await c.callTool({ name: "list_images", arguments: {} })) as CallToolResult;
+    expect((listed.structuredContent as { images: { alt_text: string | null }[] }).images[0]?.alt_text).toBe(
+      "A grey placeholder with the prompt in it.",
+    );
+    const [block] = listed.content;
+    expect(block?.type === "text" && block.text).toContain("Alt text: A grey placeholder with the prompt in it.");
+
+    const missing = await save("/etc/passwd", "nope");
+    expect(missing.isError).toBe(true);
+    const [error] = missing.content;
+    expect(error?.type === "text" && error.text).toMatch(/^Couldn't save alt text: .*isn't in Darkroom's output folder/);
+  });
+
+  it("check_contrast reports the mock's background and judges white text on it", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
+    const tool = (await c.listTools()).tools.find((t) => t.name === "check_contrast");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    const generated = (await call(c, { prompt: "a mug", seed: 7 })).structuredContent as { path: string };
+    const check = async (args: Record<string, unknown>) =>
+      (await c.callTool({ name: "check_contrast", arguments: { image: generated.path, ...args } })) as CallToolResult;
+
+    // The bottom-right corner is plain background: the mock's text is top-left, its footer bottom-left.
+    const result = await check({ text_colors: ["#ffffff", "#000"], region: { x: 0.75, y: 0.75, width: 0.25, height: 0.25 } });
+    expect(result.isError).toBeFalsy();
+    const out = result.structuredContent as {
+      region: { left: number; top: number; width: number; height: number };
+      dominant_colors: { color: string; share: number }[];
+      results: { text_color: string; worst_against: string; worst_ratio: number; body_text_aa: boolean }[];
+    };
+    expect(out.region).toEqual({ left: 384, top: 384, width: 128, height: 128 });
+    expect(out.dominant_colors).toHaveLength(1);
+    const background = out.dominant_colors[0]?.color;
+    expect(out.results.map((r) => [r.text_color, r.worst_against])).toEqual([
+      ["#ffffff", background],
+      ["#000000", background],
+    ]);
+    // White and black against the same background: their ratios multiply to 21 (within rounding).
+    const [white, black] = out.results;
+    expect((white?.worst_ratio ?? 0) * (black?.worst_ratio ?? 0)).toBeCloseTo(21, 0);
+    const [text] = result.content;
+    expect(text?.type === "text" && text.text).toMatch(/^Checked the region at 384,384 \(128×128px\) of /);
+
+    const bad = await check({ text_colors: ["white"] });
+    expect(bad.isError).toBe(true);
+    const [error] = bad.content;
+    expect(error?.type === "text" && error.text).toContain("Use a hex color");
   });
 
   it("fails at startup when DARKROOM_OPENAI_MODEL has no known prices", () => {

@@ -19,7 +19,7 @@ export const HEARTBEAT_MS = 5000;
 
 const DESCRIPTION = `Generate an image from a text prompt, save it as a PNG with a JSON metadata sidecar, and return a viewable preview plus the saved file path.
 
-Use this when the user wants an image: an illustration, icon, photo, mockup, diagram-style picture, and so on. Look at the returned preview and refine the prompt if it misses what the user asked for.
+Use this when the user wants an image: an illustration, icon, photo, mockup, diagram-style picture, and so on. Look at the returned preview and refine the prompt if it misses what the user asked for. Once an image is going into a page, app, or document, write its alt text with save_alt_text.
 
 By default this runs on a free local model. Local generation is slow (minutes, not seconds: about 1.5 minutes for "draft", 3 to 4 minutes for "final"), so iterate with quality "draft" and render "final" only once the composition is right, passing the draft's seed. With the default local model a new seed gives nearly the same picture, so to explore variations, reword the prompt instead of changing the seed.
 

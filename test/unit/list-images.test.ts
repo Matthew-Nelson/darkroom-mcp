@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -64,7 +64,28 @@ describe("listImages", () => {
       height: 416,
       seed: 42,
       cost_usd: 0.0037,
+      alt_text: null,
     });
+  });
+
+  it("returns saved alt text, and drops a hand-edited one that isn't a string", async () => {
+    const sidecar = (alt: unknown) => ({
+      version: 1,
+      created_at: "2026-10-02T10:00:00.000Z",
+      request: { prompt: "a mug", aspect_ratio: "1:1", quality: "draft" },
+      provider: "mock",
+      model: "m",
+      width: 1,
+      height: 1,
+      seed: null,
+      cost_usd: 0,
+      alt_text: alt,
+    });
+    await saved({ at: "", sidecar: sidecar("A white mug on a desk.") });
+    await saved({ at: "", sidecar: sidecar(42) });
+    const out = await listImages(dir, { limit: 20 });
+    expect(out.images.map((i) => i.alt_text).sort()).toEqual(["A white mug on a desk.", null]);
+    expect(out.unreadable).toBe(0);
   });
 
   it("filters by provider", async () => {
@@ -77,6 +98,16 @@ describe("listImages", () => {
 
   it("is empty for an empty folder", async () => {
     expect(await listImages(dir, { limit: 20 })).toEqual({ images: [], total: 0, unreadable: 0 });
+  });
+
+  it("lists only names save() writes, so every listed path is one save_alt_text and check_contrast accept (review C4)", async () => {
+    const stem = await saved({ at: "2026-10-02T10:00:00.000Z" });
+    await rename(join(dir, `${stem}.json`), join(dir, "My_Photo-abcdef12.json"));
+    await rename(join(dir, `${stem}.png`), join(dir, "My_Photo-abcdef12.png"));
+    await saved({ at: "2026-10-02T11:00:00.000Z", prompt: "kept" });
+    const out = await listImages(dir, { limit: 20 });
+    expect(out.images.map((i) => i.prompt)).toEqual(["kept"]);
+    expect(out).toMatchObject({ total: 1, unreadable: 0 });
   });
 
   it("ignores the spend ledger and its temp files", async () => {

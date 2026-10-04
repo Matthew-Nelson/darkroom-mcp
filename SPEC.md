@@ -50,15 +50,17 @@ Claude Code talks to Darkroom over stdio. The router sends each request to the f
 
 ## MCP tools
 
-v1 exposes exactly three tools; anything more waits for Phase 2.
+v1 exposes exactly three tools; anything more waits for Phase 2. M6 added `save_alt_text` and `check_contrast`.
 
 | Tool | Inputs | Returns |
 | --- | --- | --- |
 | `generate_image` | `prompt` (required), `negative_prompt`, `aspect_ratio` (enum: `1:1` default, `3:2`, `2:3`, `16:9`, `9:16`), `quality` (enum: `draft` default, `final`), `provider` (optional override), `seed`, `filename` | An MCP image content block (a downscaled JPEG preview, max 768px on the long edge, for Claude to see) plus text and `structuredContent` with the absolute file path, provider, model, actual pixel size, seed (or null), latency in ms, cost in USD (actual when the provider reports it, otherwise the estimate), ignored parameters, and any skipped providers with reasons |
 | `list_providers` | none | Each provider's name, model, enabled/healthy status, whether it costs money, estimated cost per image, and today's spend vs. the cap |
-| `list_images` | `limit` (default 20), `provider` filter | Recent generations from the metadata sidecars: path, prompt, provider, timestamp, cost |
+| `list_images` | `limit` (default 20), `provider` filter | Recent generations from the metadata sidecars: path, prompt, provider, timestamp, cost, alt text (M6) |
+| `save_alt_text` (M6) | `image` (absolute path or filename of a Darkroom PNG), `alt_text` | Writes `alt_text` into the image's sidecar atomically, replacing any earlier text, and returns the text it replaced |
+| `check_contrast` (M6) | `image`, `text_colors` (1–8 hex colors), `region` (optional, fractions of the image) | The image's (or region's) dominant colors with their shares, and for each text color its WCAG 2.2 ratio against each one, plus AA verdicts for body (4.5:1) and large (3:1) text, failing when the colors it fails against cover 10% or more of the area together |
 
-`list_providers` and `list_images` are annotated `readOnlyHint: true`. `generate_image` declares an `outputSchema` for its structured content.
+`list_providers`, `list_images`, and `check_contrast` are annotated `readOnlyHint: true`; `save_alt_text` is `destructiveHint: true`, since it replaces earlier alt text. `generate_image` declares an `outputSchema` for its structured content.
 
 Every saved image gets a JSON sidecar next to it (`image.png` + `image.json`) holding the full request, the resolved provider and model, actual size, seed, latency, cost, and timestamp. Filenames never overwrite: a short unique id is always appended to the sanitized slug.
 
@@ -167,7 +169,7 @@ The full test suite must pass in CI with no GPU, no network, and no API keys; th
 - Unit: router order, health-check skipping, **paid gating on every step down the list (failure, timeout, and unhealthy skip)**, explicit-provider behavior, enablement rules (generic `OPENAI_API_KEY` ignored), refusal-does-not-fall-back, spend reservation under parallel calls, cap math and ledger rollover at UTC midnight, filename sanitizing and path traversal rejection, aspect-ratio mapping per provider, config validation.
 - Provider contract: one shared test suite every provider must pass, run against `mock` always and against real providers only when an env flag and key are set.
 - Recorded fixtures: capture one real response per paid provider and the ComfyUI `/prompt` → `/history` → `/view` sequence, so parsing is tested offline. Replace image data with a tiny PNG and strip headers before committing.
-- Integration: spawn the server over stdio with the MCP SDK client, call all three tools, and assert on the returned content blocks and structured content.
+- Integration: spawn the server over stdio with the MCP SDK client, call every tool, and assert on the returned content blocks and structured content.
 - Manual smoke test with the MCP Inspector, documented in the README.
 
 **Eval (`npm run eval`)**
@@ -247,7 +249,7 @@ Set by Matt on Oct 4, 2026, after the repo went public. One milestone at a time,
 - **Fix: ComfyUI cancel path** (the M1 review's Low findings; a `fix/` PR, not a milestone). Cancel and timeout errors say the ComfyUI job "was cancelled" or "was stopped" before the cancel runs, and the cancel's own failures are only logged, so the message can claim a stop that never happened (ComfyUI unreachable, or the cancel timing out), or one that wasn't needed (the job had already finished). The review's report wasn't kept, so the findings are rebuilt from the code.
 - **M6: Accessibility metadata.** A `save_alt_text` tool so Claude, which can already see the image, writes alt text into the image's sidecar, and `list_images` returns it. Plus a contrast check of the image's dominant colors against supplied text colors, reporting WCAG 2.2 ratios and AA pass or fail (4.5:1 for body text, 3:1 for large text). Dominant colors come from sharp, with no new dependency.
    - Draft done when: Claude generates an image, writes its alt text, and `list_images` shows it; the contrast check gives the right ratios for known color pairs and a sensible verdict for a real image. Mock-only tests, no spend.
-   - To settle at the start: whether the contrast check is its own tool or an option on `save_alt_text`, and how an image is identified (path, or a name from `list_images`).
+   - Settled at the start (Matt, Oct 4, 2026): the contrast check is its own read-only tool, `check_contrast`. Both tools take the image's absolute path or just its filename, and only accept images Darkroom saved in `DARKROOM_OUTPUT_DIR`. A text color passes only if it passes against every dominant color covering at least 10% of the checked area, with an optional `region` for where the text will sit. Revised after the benchmark (Matt, Oct 4, 2026): a text color fails when the colors it fails against cover 10% or more *together*, since clustering can split one failing area into pieces under 10% each.
 - **M7: Image-to-image and editing.** An optional `reference_image` input on `generate_image` (a local file), with `supports.referenceImage` on each provider. OpenAI and Gemini both take an input image; ComfyUI needs an image-to-image template; mock echoes the input. Unlike `seed` or `negative_prompt`, which a provider without support ignores with a note in the result, a reference can't be quietly dropped (the image would ignore it), so a provider that can't use one is skipped or refuses; which one is settled at the start.
    - Draft done when: the same reference image and prompt run on every provider that supports it by changing only `provider`, and a provider without support refuses clearly. A small paid benchmark (cost agreed first) calibrates the estimates.
 
@@ -276,7 +278,9 @@ darkroom-mcp/
     router.ts         # provider order, health, eligibility, fallback, cap checks
     ledger.ts         # daily spend tracking (reserve / settle, atomic writes)
     storage.ts        # safe paths, PNG + JSON sidecar writes, previews
-    tools/            # generate-image.ts, list-providers.ts, list-images.ts
+    contrast.ts       # WCAG 2.2 luminance and contrast ratio (M6)
+    dominant-colors.ts # an image's main colors, via sharp (M6)
+    tools/            # generate-image.ts, list-providers.ts, list-images.ts, save-alt-text.ts, check-contrast.ts
     providers/        # types.ts, registry.ts, comfyui.ts, openai.ts, gemini.ts, mock.ts
   workflows/          # zimage.json + zimage.map.json (ComfyUI API-format template; node + model-file mapping)
   test/               # unit, contract, integration, fixtures/
