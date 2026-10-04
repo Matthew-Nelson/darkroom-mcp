@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M6 (accessibility metadata) built and accepted; review fixes pushed, awaiting re-review · PR #16 (flaky test fix) awaiting review
+## Current: M6 done (accessibility metadata, tagged `m6`) · PR #16 (flaky test fix) awaiting review · next: M7, with a plan first
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -13,7 +13,7 @@
 | M4: Ship it | done | `m4` |
 | M5: Gemini provider | done | `m5` |
 | Fix: ComfyUI cancel path (M1 review Lows) | done | — |
-| M6: Accessibility metadata | awaiting review | `m6` |
+| M6: Accessibility metadata | done | `m6` |
 | M7: Image-to-image and editing | not started | `m7` |
 | Later: GitHub release | not scheduled | — |
 
@@ -81,16 +81,15 @@ Done when (agreed with Matt, Oct 4, 2026; decisions in SPEC.md under "Phase 2 ro
 - [x] `npm run check` passes (445 tests, after review fixes)
 - [x] Claude generates an image, writes its alt text, and `list_images` shows it
 - [x] The contrast check gives the right ratios for known color pairs, and a sensible verdict for a real image
-- [ ] Matt approved and merged the M6 PR
-- [ ] Tagged `m6`
+- [x] Matt approved and merged PR #17 (after a multi-model review; all 6 findings and 3 follow-up nits fixed)
+- [x] Tagged `m6`
 
 ## Next up
 
 Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short plan for Matt:
 
-1. **M6: Accessibility metadata** (`m6/accessibility`): built and accepted; awaiting Matt's review.
-2. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`.
-3. **Later:** a GitHub release.
+1. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`. Starts with a short plan, including which providers skip or refuse a reference and the cost of the small paid benchmark.
+2. **Later:** a GitHub release.
 
 ## Deviations from spec
 
@@ -137,6 +136,10 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 4, 2026 (UTC) — M6 done (tagged `m6`)
+
+Matt approved, and PR #17 was merged (merge commit) after the review fixes. Spend for M6: $0 (mock, plus one local Z-Image render for the benchmark).
 
 ### Oct 4, 2026 (UTC) — review of PR #17
 
