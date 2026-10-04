@@ -78,7 +78,7 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 Done when (agreed with Matt, Oct 4, 2026; decisions in SPEC.md under "Phase 2 roadmap"):
 
-- [x] `npm run check` passes (444 tests, after review fixes)
+- [x] `npm run check` passes (445 tests, after review fixes)
 - [x] Claude generates an image, writes its alt text, and `list_images` shows it
 - [x] The contrast check gives the right ratios for known color pairs, and a sensible verdict for a real image
 - [ ] Matt approved and merged the M6 PR
@@ -147,6 +147,7 @@ Multi-model review of `2ead1d9` (`reviews/pr17-2ead1d9.md`): 12 raised → 6 sur
 - **C1:** a sidecar write that failed partway left its `.tmp` file behind; the write is now inside the try that unlinks it. Tested with a mocked `writeFile` that creates the file, then fails with ENOSPC (`test/unit/storage-faults.test.ts`).
 - **C4:** `list_images` listed any `<anything>-<8 hex>.json`, so it could show paths `find()` refuses. Both now share `SIDECAR_NAME` from `storage.ts`. Every image in `~/.darkroom/images` matches.
 - **C3, C2:** the PR body still stated the old verdict rule and 438 tests; both updated (444 tests now).
+- **Follow-up nits** from re-checking the fixes: with C6, `find()` ran `checkRoot()`, which recreates a deleted output folder and refused with "refusing to write", odd for the read-only `check_contrast`. A lookup now reports the folder missing instead of creating it, and the message says "refusing to use it" (both test-first). Also dropped a stray blank line in `list-images.ts`. 445 tests.
 
 ### Oct 4, 2026 (UTC) — M6 benchmark on a real Z-Image (asked for by Matt)
 
