@@ -137,6 +137,23 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 
 ## Log
 
+### Oct 4, 2026 (UTC) — M6 benchmark on a real Z-Image (asked for by Matt)
+
+`~/.darkroom/images/m6-benchmark-lake-hero-5cce5183.png`: ComfyUI, Z-Image Turbo, 16:9 `final` (1360×768), seed 20261004, 4m08s, $0, generated through this branch's build. The prompt asked for a misty mountain lake at sunrise, pines on the far shore, a red canoe on a pebble shore in the lower right, and a pastel sky in the upper third with room for a headline. Everything asked for is there; pines on the right also rise into the top-right corner, so the open sky is the left two-thirds.
+
+Alt text, written after looking at it and saved with `save_alt_text` (138 characters; `list_images` returns it): "A red canoe rests on a pebble shore beside a still, misty mountain lake at sunrise, with pine forest and a mountain under a pale peach sky."
+
+`check_contrast` with `#ffffff`, `#111111`, `#1f2a44`, checked against an independent per-pixel count (Pillow; the share of pixels where each color misses 4.5:1):
+
+| Region | White | `#111111` | `#1f2a44` | Per pixel, fails body text on |
+| --- | --- | --- | --- | --- |
+| Whole image | fail (1.51:1) | fail (1.22:1) | fail (1.08:1) | 47% / 54% / 57% |
+| Top-left sky `{0.03, 0.04, 0.6, 0.22}` | fail (1.54:1) | pass (12.19:1) | pass (9.2:1) | 100% / 0% / 0% |
+| Full-width top third | fail (1.5:1) | **pass (8.29:1)** | **pass (6.26:1)** | 87% / **13%** / **13%** |
+| Lower-left water | fail (1.88:1) | fail (1.35:1) | fail (1.02:1) | 55% / 46% / 52% |
+
+11 of 12 verdicts agree. **Gap found:** in the full-width top third, dark text passes, but it fails on 13% of the band (the top-right pines). The pines came back as two dark colors, 8% and 5%; each is under the 10% cutoff, so neither counted. The rule as built lets one failing area escape when clustering splits it. A fix for Matt to choose: fail when the colors a text color fails against *together* cover 10% or more, or count failing pixels directly.
+
 ### Oct 4, 2026 (UTC) — M6 built and accepted; awaiting review
 
 Branch `m6/accessibility`. Matt chose, at the start: `check_contrast` as its own tool, images found by absolute path or filename, and a verdict judged against the worst color covering ≥10% of the area, with an optional region.
