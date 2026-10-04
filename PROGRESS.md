@@ -1,6 +1,6 @@
 # Progress
 
-## Current: v1 + M5 done, repo public (`v0.1.0`) · Phase 2 roadmap set · cancel-path fix awaiting review
+## Current: v1 + M5 done, repo public (`v0.1.0`) · cancel-path fix done (PR #15) · next: M6, with Matt's go-ahead
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -12,7 +12,7 @@
 | M3: Router and guardrails | done | `m3` |
 | M4: Ship it | done | `m4` |
 | M5: Gemini provider | done | `m5` |
-| Fix: ComfyUI cancel path (M1 review Lows) | awaiting review | — |
+| Fix: ComfyUI cancel path (M1 review Lows) | done | — |
 | M6: Accessibility metadata | not started | `m6` |
 | M7: Image-to-image and editing | not started | `m7` |
 | Later: GitHub release | not scheduled | — |
@@ -78,10 +78,9 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short plan for Matt:
 
-1. **Fix: ComfyUI cancel path** (`fix/comfyui-cancel`): built, PR open, awaiting Matt's review.
-2. **M6: Accessibility metadata** (`m6/…`): `save_alt_text` and a WCAG contrast check.
-3. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`.
-4. **Later:** a GitHub release.
+1. **M6: Accessibility metadata** (`m6/…`): `save_alt_text` and a WCAG contrast check.
+2. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`.
+3. **Later:** a GitHub release.
 
 ## Deviations from spec
 
@@ -144,6 +143,8 @@ Testing:
 - Spend: $0.
 
 Re-check of `bfb2a7e`: all 7 fixed, 1 new Low (N1). Once the interrupt or delete had gone through, the follow-up `/history` reads that refine the message could still fail, and that turned a working cancel into "couldn't cancel… may still be running", with the 500 text twice. Those reads are now best effort. 2 new tests, written first and failing; `npm run check`: 367 tests.
+
+Two leftovers from that re-check, both done: the `cancel()` doc comment now says the `/history` checks are best effort, and a new test covers a `/history` entry that already holds `execution_interrupted` (it fails if that check is removed). `npm run check`: 368 tests. Matt approved the merge.
 
 ### Oct 4, 2026 (UTC) — ComfyUI cancel path fixed; awaiting review
 
