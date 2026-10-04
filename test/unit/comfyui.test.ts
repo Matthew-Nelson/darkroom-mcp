@@ -32,6 +32,7 @@ interface FakeOptions {
   cancelDelayMs?: number; // how long POST /queue takes to answer
   pending?: "once" | "always"; // our job shows as pending in /queue: until the second delete, or for good
   historyStatus?: number; // HTTP status of /history while polling (before any cancel)
+  historyFailsDuringCancel?: boolean; // /history keeps returning historyStatus during the cancel too
   hangView?: boolean; // /view never answers; it rejects once the request is aborted
   unreachable?: boolean | "bad port";
   missingClasses?: string[];
@@ -96,7 +97,7 @@ function fakeComfy(o: FakeOptions = {}) {
       return json({ prompt_id: promptId, number: 1, node_errors: {} });
     }
     if (path.startsWith("/history/")) {
-      if (o.historyStatus && !cancelling) return json({}, o.historyStatus);
+      if (o.historyStatus && (!cancelling || o.historyFailsDuringCancel)) return json({}, o.historyStatus);
       polls++;
       const name = o.history === undefined ? "history-success.json" : o.history;
       const ended = o.endsDuringCancel && cancelling;
@@ -250,6 +251,21 @@ describe("comfyui provider: generate", () => {
       /^ComfyUI returned HTTP 500 for GET \/history\/[0-9a-f-]{36}\. ComfyUI is stopping the job\.$/,
     );
     expect(comfy.posted("/interrupt")).toHaveLength(1);
+  });
+
+  it("still reports a sent interrupt when /history keeps failing during the cancel", async () => {
+    const comfy = fakeComfy({ historyStatus: 500, historyFailsDuringCancel: true, running: true });
+    await expect(comfy.provider().generate(request, signal())).rejects.toThrow(
+      /^ComfyUI returned HTTP 500 for GET \/history\/[0-9a-f-]{36}\. ComfyUI is stopping the job\.$/,
+    );
+    expect(comfy.posted("/interrupt")).toHaveLength(1);
+  });
+
+  it("doesn't say a dequeued job may still run when /history keeps failing during the cancel", async () => {
+    const comfy = fakeComfy({ historyStatus: 500, historyFailsDuringCancel: true, running: false });
+    await expect(comfy.provider().generate(request, signal())).rejects.toThrow(
+      /^ComfyUI returned HTTP 500 for GET \/history\/[0-9a-f-]{36}\. The job is no longer running or queued in ComfyUI\.$/,
+    );
   });
 });
 

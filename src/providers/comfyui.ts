@@ -35,6 +35,7 @@ export interface ComfyUIOptions {
 type CancelOutcome =
   | { kind: "interrupted" } // our job was running; ComfyUI stops it at the next step
   | { kind: "dequeued" } // it hadn't started, and it's gone from the queue
+  | { kind: "gone" } // not running or queued, but /history couldn't say whether it ever ran
   | { kind: "ended" } // it ended on its own just before the cancel: finished, failed, or stopped by someone else
   | { kind: "failed"; reason: string };
 
@@ -125,7 +126,8 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
           await post("/interrupt", signal, { prompt_id: promptId });
           log("info", "interrupted ComfyUI job", { prompt_id: promptId });
           // /interrupt does nothing if the job ended after the /queue read; then it's in /history without an interrupt.
-          const entry = await historyEntry(promptId, signal);
+          // Best effort: the interrupt went through, so a failed /history read leaves it at "interrupted".
+          const entry = await historyEntry(promptId, signal).catch(() => undefined);
           const interrupted = !entry || entry.status?.messages?.some(([type]) => type === "execution_interrupted");
           return { kind: interrupted ? "interrupted" : "ended" };
         }
@@ -133,7 +135,9 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
         if (attempt === 2) throw new ComfyUIError("It's still in ComfyUI's queue after two deletes.");
       }
       // Not running and not queued: either the delete caught it waiting, or it ended before the cancel got there.
-      return { kind: (await historyEntry(promptId, signal)) ? "ended" : "dequeued" };
+      // Best effort: the job is stopped either way, so a failed /history read only loses which one.
+      const entry = await historyEntry(promptId, signal).catch(() => null);
+      return { kind: entry === null ? "gone" : entry ? "ended" : "dequeued" };
     } catch (err) {
       const reason = signal.aborted
         ? `ComfyUI didn't answer the cancel within ${cancelTimeoutMs / 1000}s.`
@@ -329,6 +333,8 @@ function describeCancel(outcome: CancelOutcome): string {
       return "ComfyUI is stopping the job.";
     case "dequeued":
       return "The job hadn't started, and it's no longer in ComfyUI's queue.";
+    case "gone":
+      return "The job is no longer running or queued in ComfyUI.";
     case "ended":
       return "The ComfyUI job ended just as Darkroom went to cancel it, so there was nothing to stop.";
     case "failed":
