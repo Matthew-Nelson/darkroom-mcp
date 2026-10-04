@@ -35,7 +35,7 @@ describe("comfyui provider against a real ComfyUI", () => {
     const run = provider.generate({ prompt: "a red bicycle", aspectRatio: "1:1", quality: "draft" }, ac.signal, (u) => {
       if (u.step === 1) ac.abort();
     });
-    await expect(run).rejects.toThrow("Generation was cancelled, and the ComfyUI job was stopped.");
+    await expect(run).rejects.toThrow("Generation was cancelled. ComfyUI is stopping the job.");
     // Interrupts land between sampler steps, so allow one step (~15s) to finish.
     const deadline = Date.now() + 30_000;
     let queue: { queue_running: unknown[]; queue_pending: unknown[] };
