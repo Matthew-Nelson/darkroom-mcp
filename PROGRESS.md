@@ -125,6 +125,24 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 
 ## Log
 
+### Oct 4, 2026 (UTC) — review of PR #15 (cancel path)
+
+A triple review (opus and sonnet legs; the third leg was skipped) raised 12 findings: 7 survived verification, all Low, and all 7 were fixed. The fixes:
+
+- The timeout and abort flags are now read before the cancel runs, so a polling 500 is no longer reported as a timeout.
+- If a timeout or abort hits after ComfyUI finished, while Darkroom fetches the image, the message says the job finished and the image wasn't fetched or saved.
+- A job still pending after the delete gets a second delete. If it's still there after that, the cancel counts as failed.
+- After `/interrupt`, the cancel checks `/history`, so a job that ended on its own first isn't reported as stopped.
+- No cancel runs after a submit that failed outright, since nothing was queued.
+- Other errors now say what the cancel did, too.
+- Two stale comments were fixed.
+
+Testing:
+
+- Wrote 10 failing tests first: 8 new ones, plus 2 where the expected message changed. `npm run check`: 365 tests.
+- `npm run test:comfyui`: 3 passed, and the mid-sampling abort was still interrupted. ComfyUI's log showed "Interrupting prompt …" and "Processing interrupted".
+- Spend: $0.
+
 ### Oct 4, 2026 (UTC) — ComfyUI cancel path fixed; awaiting review
 
 The M1 review's Low findings, rebuilt from the code: cancel and timeout errors were written before the cancel ran, so they always said the job "was cancelled" or "was stopped". That was wrong when ComfyUI couldn't be reached, when the cancel timed out, when it got an HTTP error (which counted as success), or when the job had already ended (including a cancel after ComfyUI finished, while Darkroom was fetching the image). The cancel now runs first and reports what it did (interrupted, dequeued before it started, already ended, or failed with the reason), and the message says that. A failed cancel says the job may still be running.
