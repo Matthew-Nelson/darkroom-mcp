@@ -63,7 +63,7 @@ describe("openai provider", () => {
     const p = provider(fakeFetch(reply("generations-200-low.json")).fetch);
     expect(p.name).toBe("openai");
     expect(p.isPaid).toBe(true);
-    expect(p.supports).toEqual({ negativePrompt: false, seed: false });
+    expect(p.supports).toEqual({ negativePrompt: false, seed: false, referenceImage: false });
     const draft = p.estimateCostUsd(request);
     const final = p.estimateCostUsd({ ...request, quality: "final" });
     expect(draft).toBeGreaterThan(0);

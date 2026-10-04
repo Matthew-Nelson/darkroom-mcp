@@ -89,7 +89,7 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
     name: "openai",
     model,
     isPaid: true,
-    supports: { negativePrompt: false, seed: false },
+    supports: { negativePrompt: false, seed: false, referenceImage: false },
     estimateCostUsd,
 
     // Free and offline, per the spec: a paid provider is healthy when it has its key.

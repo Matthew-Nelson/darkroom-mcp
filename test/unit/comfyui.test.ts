@@ -221,7 +221,7 @@ describe("comfyui provider: generate", () => {
     const p = fakeComfy().provider();
     expect(p.isPaid).toBe(false);
     expect(p.estimateCostUsd(request)).toBe(0);
-    expect(p.supports).toEqual({ negativePrompt: false, seed: true });
+    expect(p.supports).toEqual({ negativePrompt: false, seed: true, referenceImage: false });
   });
 
   it("explains a rejected workflow using ComfyUI's node errors", async () => {

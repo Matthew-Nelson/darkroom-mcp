@@ -20,9 +20,8 @@ export function providerContract(label: string, make: () => ImageProvider | Prom
       expect(PROVIDER_NAMES).toContain(p.name);
       expect(p.model).toMatch(/\S/);
       expect(p.isPaid).toBe(PAID_PROVIDERS.has(p.name as ProviderName));
-      expect(Object.keys(p.supports).sort()).toEqual(["negativePrompt", "seed"]);
-      expect(typeof p.supports.negativePrompt).toBe("boolean");
-      expect(typeof p.supports.seed).toBe("boolean");
+      expect(Object.keys(p.supports).sort()).toEqual(["negativePrompt", "referenceImage", "seed"]);
+      for (const value of Object.values(p.supports)) expect(typeof value).toBe("boolean");
     });
 
     it("estimates cost for every shape: zero when free, above zero when paid", async () => {

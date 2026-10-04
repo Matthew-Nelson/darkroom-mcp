@@ -104,7 +104,7 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
     isPaid: true,
     // Not exact: the same seed gives the same composition, slightly reframed, and it
     // carries from a 512px draft to a 1K final (M5 benchmark).
-    supports: { negativePrompt: false, seed: true },
+    supports: { negativePrompt: false, seed: true, referenceImage: false },
     estimateCostUsd,
 
     // Free and offline, per the spec: a paid provider is healthy when it has its key.

@@ -74,6 +74,13 @@ export class Router {
         if (!PAID_PROVIDERS.has(name)) freePassed ??= { name, how: "was skipped" };
         continue;
       }
+      // A reference can't be dropped the way an unsupported seed is: the image would ignore it.
+      if (req.referenceImage && !provider.supports.referenceImage) {
+        if (opts.provider) throw new NoProviderError(this.cantUseReference(name), []);
+        skipped.push({ provider: name, reason: "can't use a reference image" });
+        if (!provider.isPaid) freePassed ??= { name, how: "was skipped" };
+        continue;
+      }
       if (provider.isPaid && freePassed && !this.config.allowPaidFallback) {
         skipped.push({
           provider: name,
@@ -153,6 +160,16 @@ export class Router {
     const health = await provider.healthCheck().catch((err: unknown) => ({ ok: false, detail: errorMessage(err) }));
     if (health.ok) this.healthyUntil.set(name, Date.now() + HEALTH_CACHE_MS);
     return health;
+  }
+
+  private cantUseReference(name: ProviderName): string {
+    const able = [...this.providers.values()].filter((p) => p.supports.referenceImage).map((p) => p.name);
+    const next =
+      able.length > 0
+        ? `Enabled providers that can: ${able.join(", ")}. ` +
+          "Leave out provider to use the configured order, or drop reference_image."
+        : "No enabled provider can, so drop reference_image.";
+    return `Provider "${name}" can't use a reference image. ${next}`;
   }
 
   private async closeFailed(reservation: Reservation, err: unknown): Promise<void> {

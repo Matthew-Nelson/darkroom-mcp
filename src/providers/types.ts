@@ -43,7 +43,9 @@ export interface ImageProvider {
   name: string;
   model: string; // what GenerateResult.model will say, shown before any generation
   isPaid: boolean;
-  supports: { negativePrompt: boolean; seed: boolean };
+  // referenceImage: whether it can base an image on GenerateRequest.referenceImage. Unlike
+  // the others, a reference is never ignored: the router won't send one to a provider without support.
+  supports: { negativePrompt: boolean; seed: boolean; referenceImage: boolean };
   estimateCostUsd(req: GenerateRequest): number;
   healthCheck(): Promise<{ ok: boolean; detail?: string }>;
   // Maps aspectRatio to the nearest size the provider supports.

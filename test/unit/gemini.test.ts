@@ -61,7 +61,7 @@ describe("gemini provider", () => {
     expect(p.name).toBe("gemini");
     expect(p.model).toBe("gemini-3.1-flash-image");
     expect(p.isPaid).toBe(true);
-    expect(p.supports).toEqual({ negativePrompt: false, seed: true });
+    expect(p.supports).toEqual({ negativePrompt: false, seed: true, referenceImage: false });
     const draft = p.estimateCostUsd(request);
     const final = p.estimateCostUsd({ ...request, quality: "final" });
     expect(final).toBeGreaterThan(draft);
