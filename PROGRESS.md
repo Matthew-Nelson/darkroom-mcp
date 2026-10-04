@@ -1,6 +1,6 @@
 # Progress
 
-## Current: v1 + M5 done, repo public (`v0.1.0`) · cancel-path fix done (PR #15) · next: M6, with Matt's go-ahead
+## Current: M6 (accessibility metadata) built and accepted; awaiting review · PR #16 (flaky test fix) awaiting review
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -13,7 +13,7 @@
 | M4: Ship it | done | `m4` |
 | M5: Gemini provider | done | `m5` |
 | Fix: ComfyUI cancel path (M1 review Lows) | done | — |
-| M6: Accessibility metadata | not started | `m6` |
+| M6: Accessibility metadata | awaiting review | `m6` |
 | M7: Image-to-image and editing | not started | `m7` |
 | Later: GitHub release | not scheduled | — |
 
@@ -74,15 +74,28 @@ Done when (agreed with Matt, Oct 3, 2026):
 - [x] Matt approved and merged PR #10 (after a multi-model review; all 5 findings fixed)
 - [x] Tagged `m5`
 
+## M6 gates
+
+Done when (agreed with Matt, Oct 4, 2026; decisions in SPEC.md under "Phase 2 roadmap"):
+
+- [x] `npm run check` passes (438 tests)
+- [x] Claude generates an image, writes its alt text, and `list_images` shows it
+- [x] The contrast check gives the right ratios for known color pairs, and a sensible verdict for a real image
+- [ ] Matt approved and merged the M6 PR
+- [ ] Tagged `m6`
+
 ## Next up
 
 Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short plan for Matt:
 
-1. **M6: Accessibility metadata** (`m6/…`): `save_alt_text` and a WCAG contrast check.
+1. **M6: Accessibility metadata** (`m6/accessibility`): built and accepted; awaiting Matt's review.
 2. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`.
 3. **Later:** a GitHub release.
 
 ## Deviations from spec
+
+- **Additions to `save_alt_text`** (M6). It also records `alt_text_updated_at` and returns `previous_alt_text`, so replacing alt text can be undone; that's also why it's annotated `destructiveHint: true`. Alt text is capped at 1,000 characters.
+- **How dominant colors are found** (M6). SPEC said only "from sharp". The image (or region) is shrunk to 256px, bucketed at 5 bits per channel, grouped with weighted k-means (at most 6, seeded deterministically), and groups within 40 RGB units merged. Because there are at most 6 colors, the largest covers at least 1/6, so the 10% verdict rule always has a color to judge against.
 
 - **Gemini became M5, in several commits** (Oct 3, 2026). SPEC planned it as one self-contained commit. The provider is still one new file plus one registry line, but it came with a shared-helpers refactor (`src/providers/paid-api.ts`), two config variables (`DARKROOM_GEMINI_MODEL`, `DARKROOM_GEMINI_TIMEOUT_MS`), and benchmark calibration as separate commits. SPEC.md updated.
 - **Gemini is the pricier paid provider** (M5). A Gemini `draft` ($0.046) costs more than an OpenAI square `final` ($0.0133); a Gemini `final` ($0.0685) costs about 5× as much. It's documented as the second paid option, not a cheaper one.
@@ -123,6 +136,26 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 4, 2026 (UTC) — M6 built and accepted; awaiting review
+
+Branch `m6/accessibility`. Matt chose, at the start: `check_contrast` as its own tool, images found by absolute path or filename, and a verdict judged against the worst color covering ≥10% of the area, with an optional region.
+
+Commits: find a saved image and rewrite its sidecar atomically (storage); `save_alt_text` and `alt_text` in `list_images`; WCAG 2.2 contrast math; dominant colors with sharp; `check_contrast`; README and SPEC.
+
+Acceptance:
+
+- **Alt text, end to end.** Headless `claude -p` (Claude Code 2.1.289) against this branch's `dist/`, `DARKROOM_PROVIDER_ORDER=mock`, a scratch output folder. Asked to generate a hero image of a mug, write and save its alt text, then report what `list_images` returned. Claude called `generate_image`, looked at the preview, saw it was a mock placeholder, and saved alt text describing what's actually there ("Placeholder graphic: a navy panel with white text describing a planned photo of a ceramic mug…") rather than the mug it asked for. `list_images` returned that text exactly; the sidecar on disk has `alt_text` and `alt_text_updated_at`. Cost $0 (mock).
+- **Known pairs.** Unit tests, cross-checked against an independent Python implementation: black/white 21:1, `#767676` 4.54 (passes body text), `#777777` 4.47 (fails), `#949494` 3.03 (passes large text), `#959595` 2.99 (fails), and others.
+- **A real image.** `check_contrast` over stdio on a Z-Image `final` (1248×832, a white mug by a window), text colors `#ffffff` and `#111111`:
+  - Whole image: both fail (worst 1.32:1 and 1.73:1). Six colors from near-white to dark wood; nothing reads on all of it.
+  - Window, top-left: one color `#d9e1d6`; dark text passes (14.1:1), white fails (1.33:1).
+  - Wall, top-right: `#504740` 99%; white passes (9.06:1), dark text fails (2.08:1).
+  - Desk, bottom strip: white fails (1.23:1, against sun-washed `#ebe7e2`, 38%); dark text fails body (4.22:1, against `#95704c`) but passes large.
+  - The wall and the desk strip looked wrong to me at first: the wall looks light grey next to the window, and the strip looks like all wood. Sampling pixels showed the tool was right: Pillow (in ComfyUI's venv) gives the wall a mean of `(81,72,65)` and the window `(217,225,214)`, matching the tool, and the left third of the strip is near-white `(235,232,228)`. The README now uses this as its example of why to measure rather than eyeball.
+- Inspector CLI (2.9.0) lists all five tools.
+
+Along the way: one `npm run check` failed on a timing-dependent ComfyUI cancel test from PR #15 (it passed alone and on rerun). It's fixed separately in PR #16 (`fix/comfyui-test-timing`, test-only). Commit `93d3901` (contrast math) went in during that failing run; its own tests passed, and the full suite passed on the next run. Mid-session, a stray `inspector --version` opened the Inspector web UI on Matt's machine; closed straight away.
 
 ### Oct 4, 2026 (UTC) — review of PR #15 (cancel path)
 
