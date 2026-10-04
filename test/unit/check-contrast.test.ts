@@ -63,6 +63,19 @@ describe("checkContrast", () => {
     expect(white?.ratios).toHaveLength(2);
   });
 
+  it("adds up colors under 10% that fail, so splitting a dark area into pieces can't hide it", async () => {
+    // Like pines in the corner of a sky: two dark colors, 8% and 5%, each under the cutoff, 13% together.
+    const path = await bands(["#dcd0cb", 87], ["#1f211a", 8], ["#5a5b61", 5]);
+    const out = await checkContrast(path, ["#111111"]);
+    expect(out.dominant_colors.map((c) => [c.color, c.share])).toEqual([
+      ["#dcd0cb", 0.87],
+      ["#1f211a", 0.08],
+      ["#5a5b61", 0.05],
+    ]);
+    // Sorted by ratio, the 10% mark falls inside the second dark color.
+    expect(out.results[0]).toMatchObject({ worst_against: "#5a5b61", body_text_aa: false, large_text_aa: false });
+  });
+
   it("checks only the region when one is given", async () => {
     const path = await bands(["#d8dde6", 50], ["#1b2a4a", 50]);
     const whole = await checkContrast(path, ["#fff"]);

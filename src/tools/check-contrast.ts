@@ -17,14 +17,15 @@ import { StorageError, type Storage } from "../storage.js";
 import { imageRefSchema } from "./save-alt-text.js";
 
 /**
- * Colors covering at least this share of the checked area decide the verdict. With
- * at most 6 colors, the largest always covers at least 1/6, so there's always one.
+ * A text color fails when the colors it fails against cover at least this share of
+ * the checked area together, so a failing area clustering split into small pieces
+ * still counts.
  */
 export const MAJOR_SHARE = 0.1;
 
 const DESCRIPTION = `Check whether text in the given colors would be readable on top of a generated image, using WCAG 2.2 contrast.
 
-It finds the image's dominant colors (or those in a region, such as where a headline will sit) and, for each text color, gives the contrast ratio against each one and an AA verdict: at least ${AA_NORMAL_TEXT}:1 for body text, ${AA_LARGE_TEXT}:1 for large text (18pt and up, or 14pt bold). A text color passes only if it passes against every color covering at least ${MAJOR_SHARE * 100}% of the checked area, so the verdict is the worst sizable background, not the average.
+It finds the image's dominant colors (or those in a region, such as where a headline will sit) and, for each text color, gives the contrast ratio against each one and an AA verdict: at least ${AA_NORMAL_TEXT}:1 for body text, ${AA_LARGE_TEXT}:1 for large text (18pt and up, or 14pt bold). A text color fails when the colors it fails against cover ${MAJOR_SHARE * 100}% or more of the checked area together, so the verdict is the worst sizable background, not the average.
 
 Use this when text will be placed over the image (a banner, poster, slide, or card). Pass a region when the text sits in one part of the image; the whole image is usually busier than the spot behind the text. It looks at color areas, not fine texture, so small text over a busy pattern can be hard to read even when this passes. It reads the file only and costs nothing.`;
 
@@ -67,7 +68,9 @@ const outputSchema = {
   results: z.array(
     z.object({
       text_color: z.string(),
-      worst_ratio: z.number().describe(`Lowest ratio against a color covering at least ${MAJOR_SHARE * 100}% of the area`),
+      worst_ratio: z
+        .number()
+        .describe(`The ratio at the worst ${MAJOR_SHARE * 100}% of the area: colors with lower ratios cover less than that together`),
       worst_against: z.string(),
       body_text_aa: z.boolean().describe(`worst_ratio is at least ${AA_NORMAL_TEXT}:1`),
       large_text_aa: z.boolean().describe(`worst_ratio is at least ${AA_LARGE_TEXT}:1`),
@@ -87,9 +90,7 @@ export async function checkContrast(pngPath: string, textColors: string[], regio
   const results = textColors.map((input) => {
     const text = parseHexColor(input);
     const ratios = colors.map((c) => ({ color: toHex(c.color), share: c.share, ratio: contrastRatio(text, c.color) }));
-    const worst = ratios
-      .filter((r) => r.share >= MAJOR_SHARE)
-      .reduce((a, b) => (b.ratio < a.ratio ? b : a));
+    const worst = worstSizable(ratios);
     return {
       text_color: toHex(text),
       worst_ratio: displayRatio(worst.ratio),
@@ -105,6 +106,23 @@ export async function checkContrast(pngPath: string, textColors: string[], regio
     dominant_colors: colors.map((c) => ({ color: toHex(c.color), share: roundShare(c.share) })),
     results,
   };
+}
+
+/**
+ * Walks the colors from lowest ratio up until they cover MAJOR_SHARE of the area
+ * together, and returns the one where that happens. A threshold fails at this
+ * color exactly when the colors failing it cover MAJOR_SHARE or more, however
+ * clustering split them up.
+ */
+function worstSizable<T extends { share: number; ratio: number }>(ratios: T[]): T {
+  const sorted = [...ratios].sort((a, b) => a.ratio - b.ratio);
+  let covered = 0;
+  for (const r of sorted) {
+    covered += r.share;
+    if (covered >= MAJOR_SHARE - 1e-9) return r;
+  }
+  // Shares add up to 1, so this is only reached on an empty list.
+  throw new Error("No colors found in the image.");
 }
 
 /** Turns a fractional region into a pixel box at least 1px across, inside the image. */

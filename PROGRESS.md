@@ -95,7 +95,8 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 ## Deviations from spec
 
 - **Additions to `save_alt_text`** (M6). It also records `alt_text_updated_at` and returns `previous_alt_text`, so replacing alt text can be undone; that's also why it's annotated `destructiveHint: true`. Alt text is capped at 1,000 characters.
-- **How dominant colors are found** (M6). SPEC said only "from sharp". The image (or region) is shrunk to 256px, bucketed at 5 bits per channel, grouped with weighted k-means (at most 6, seeded deterministically), and groups within 40 RGB units merged. Because there are at most 6 colors, the largest covers at least 1/6, so the 10% verdict rule always has a color to judge against.
+- **The contrast verdict counts failing colors together** (Matt, Oct 4, 2026, after the M6 benchmark). Agreed at the start: pass only against every color covering at least 10%. The benchmark showed clustering can split one failing area (pines, 13% of a band) into colors under 10% each, which then didn't count. Now a text color fails when the colors it fails against cover 10% or more together; `worst_ratio` is the ratio where the lowest-contrast colors reach 10%.
+- **How dominant colors are found** (M6). SPEC said only "from sharp". The image (or region) is shrunk to 256px, bucketed at 5 bits per channel, grouped with weighted k-means (at most 6, seeded deterministically), and groups within 40 RGB units merged.
 
 - **Gemini became M5, in several commits** (Oct 3, 2026). SPEC planned it as one self-contained commit. The provider is still one new file plus one registry line, but it came with a shared-helpers refactor (`src/providers/paid-api.ts`), two config variables (`DARKROOM_GEMINI_MODEL`, `DARKROOM_GEMINI_TIMEOUT_MS`), and benchmark calibration as separate commits. SPEC.md updated.
 - **Gemini is the pricier paid provider** (M5). A Gemini `draft` ($0.046) costs more than an OpenAI square `final` ($0.0133); a Gemini `final` ($0.0685) costs about 5× as much. It's documented as the second paid option, not a cheaper one.
@@ -152,7 +153,7 @@ Alt text, written after looking at it and saved with `save_alt_text` (138 charac
 | Full-width top third | fail (1.5:1) | **pass (8.29:1)** | **pass (6.26:1)** | 87% / **13%** / **13%** |
 | Lower-left water | fail (1.88:1) | fail (1.35:1) | fail (1.02:1) | 55% / 46% / 52% |
 
-11 of 12 verdicts agree. **Gap found:** in the full-width top third, dark text passes, but it fails on 13% of the band (the top-right pines). The pines came back as two dark colors, 8% and 5%; each is under the 10% cutoff, so neither counted. The rule as built lets one failing area escape when clustering splits it. A fix for Matt to choose: fail when the colors a text color fails against *together* cover 10% or more, or count failing pixels directly.
+11 of 12 verdicts agree. **Gap found:** in the full-width top third, dark text passes, but it fails on 13% of the band (the top-right pines). The pines came back as two dark colors, 8% and 5%; each is under the 10% cutoff, so neither counted. The rule as built lets one failing area escape when clustering splits it. Matt chose to fail when the colors a text color fails against *together* cover 10% or more (rather than counting pixels). Fixed with a failing test first; rerun, all 12 verdicts now match the per-pixel count (dark text in the full-width top third fails at 2.79:1 against the pines, body and large).
 
 ### Oct 4, 2026 (UTC) — M6 built and accepted; awaiting review
 
