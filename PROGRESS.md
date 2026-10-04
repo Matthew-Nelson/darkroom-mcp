@@ -72,7 +72,8 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 ## Next up
 
-- M5 is done. Next steps wait for Matt's go-ahead: the M1 review's unaddressed Lows (cancel path), the Flux schnell template (optional), the demo GIF, the npm publish decision, then Phase 2.
+- M5 is done. Next steps wait for Matt's go-ahead: the M1 review's unaddressed Lows (cancel path), the Flux schnell template (optional), the demo GIF, then Phase 2.
+- Going public (`chore/go-public`): once that PR merges, make the repo public, then turn on branch protection for `main` (PR plus passing CI), secret scanning with push protection, private vulnerability reporting, and Dependabot alerts.
 - Check Google's billing report for Oct 3 (UTC) once it updates: it should show about $1.22. Much more would mean the unlabeled output tokens are billed at the image rate (see the M5 log).
 
 ## Deviations from spec
@@ -83,8 +84,9 @@ Done when (agreed with Matt, Oct 3, 2026):
 - **`generateContent`, not the Interactions API** (M5). Google now steers new projects to the beta Interactions API, but recommends `generateContent` for stable deployments, and Interactions stores requests by default.
 - **Gemini's unlabeled output tokens are billed at the text rate** (M5). Each response reported 414–482 output tokens beyond the `IMAGE` count, with no modality and no `thoughtsTokenCount`. Darkroom prices them at the $3/M text and thinking rate, which puts its computed costs 2.2–2.6% over the per-image list price (that price covers only image tokens); at the image rate they'd be 37–59% over. This is Darkroom's own arithmetic, to be confirmed against Google's billing report.
 
+- **Public repo, no npm package** (Matt, Oct 3, 2026). Darkroom is a portfolio piece: the repo goes public and is never published to npm. `package.json` has `"private": true` so `npm publish` refuses (`npm pack` still works), the dead `prepublishOnly` hook is gone (`prepack` now runs the build, so a fresh clone's tarball includes `dist/`), and SPEC's "published package" goal and Phase 2 gate now mean the public repo. Before going public, all 106 commits, PR text, and review comments were searched for keys: only test fakes. Commit author emails stay as they are (rewriting history would break the tags and PR merges).
 - **No demo GIF in v1** (Matt, Oct 3, 2026). SPEC's M4 lists a README GIF of Claude generating, critiquing, and regenerating. Skipped for now; the README's visuals are the eval thumbnails. It can be added later as its own `docs/` PR (record the terminal, then trim and convert with ffmpeg).
-- **No npm publish in M4** (Matt, Oct 3, 2026: the repo stays private, and publishing is undecided). The acceptance test ran against the packed tarball instead (`npm pack`, then `claude mcp add ... -- npx -y -p <tgz> darkroom-mcp` with an empty npm cache), which exercises the same install path. Publishing later is `npm publish` plus swapping the README's command for `npx -y darkroom-mcp`. License: MIT.
+- **No npm publish in M4** (Matt, Oct 3, 2026: the repo stays private, and publishing is undecided; superseded after M5 by "Public repo, no npm package" above). The acceptance test ran against the packed tarball instead (`npm pack`, then `claude mcp add ... -- npx -y -p <tgz> darkroom-mcp` with an empty npm cache), which exercises the same install path. License: MIT.
 - **The eval budget is per UTC day** (M4). The eval keeps its own ledger in `DARKROOM_EVAL_OUTPUT_DIR` (default `~/.darkroom/eval`, apart from the images `list_images` shows), using the same daily-keyed ledger code with `DARKROOM_EVAL_BUDGET_USD` (default $0.50) as the cap. A run that would spend anything stops after printing its estimate unless given `--yes`. The cache key also includes aspect ratio and quality.
 - **`tsx` is a new devDependency** (M4), to run `eval/run.ts` straight from the TypeScript sources with the real router. No new runtime dependency.
 - **Only healthy results are cached for 60s** (M3). SPEC says "health check cached for 60s". Caching a failure would leave ComfyUI skipped for up to a minute after it's started; checks are cheap, so unhealthy providers are rechecked on every call. A failed `generate` also drops the provider's cached result.
@@ -114,6 +116,16 @@ Done when (agreed with Matt, Oct 3, 2026):
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 4, 2026 (UTC) — review of PR #11 (go public)
+
+A multi-model review of `09c0f2f` (opus and sonnet legs; the Gemini leg was skipped) posted 5 findings: 1 High, 1 Medium, 3 Low. All fixed on the branch:
+
+- **C4 (High):** `npm pack` doesn't build, and `dist/` is gitignored, so a fresh clone packed a 5-file tarball with no `dist/index.js`. Reproduced from a fresh clone first; `prepack` now runs the build, and the same clone packs 43 files, installs, and its bin lists the three tools over stdio.
+- **C5 (Medium):** `SECURITY.md`'s only channel, private vulnerability reporting, is off until it's turned on after the flip. It now says to open an issue asking for a private contact, with no details, if the link doesn't work.
+- **C1, C2, C3 (Low):** the old "No npm publish in M4" deviation is marked superseded and no longer gives publish steps; SPEC's M4 line says packed-tarball install; the README says the tarball is built from a clone.
+
+`npm run check` passes (354 tests).
 
 ### Oct 3, 2026 (UTC) — M5 done (tagged `m5`)
 

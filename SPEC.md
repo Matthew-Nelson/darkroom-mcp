@@ -10,7 +10,7 @@ It is both a tool Matt will actually use and a resume project that demonstrates 
 
 ## Goals and non-goals
 
-The v1 bar is three working tools, three providers (mock, local, one paid) behind one interface, and a published package someone else can install in under five minutes. The second paid provider lands right after v1 as its own commit, proving that adding a provider is cheap.
+The v1 bar is three working tools, three providers (mock, local, one paid) behind one interface, and a package someone else can install in under five minutes (a packed tarball: see M4). The second paid provider lands right after v1 as its own commit, proving that adding a provider is cheap.
 
 **Goals**
 
@@ -18,7 +18,7 @@ The v1 bar is three working tools, three providers (mock, local, one paid) behin
 2. Swap providers with one config change and no code change; adding a provider means one new provider file plus one line in the provider registry.
 3. Never spend money silently: paid providers are opt-in by explicit config (not by the mere presence of an API key), with a daily spend cap and a cost on every result.
 4. Return the image to Claude so it can critique and refine its own output.
-5. Ship resume-grade: tests, a small eval report, a README with a demo GIF, and an npm package.
+5. Ship resume-grade: tests, a small eval report, a README with a demo GIF, and a public repo that installs from source or a tarball (no npm package; see M4).
 6. Have fun and keep scope tight: v1 in roughly two weekends, with the second paid provider and the Flux/SDXL templates as the first post-v1 commits.
 
 **Non-goals for v1**
@@ -230,9 +230,10 @@ Five milestones for v1 (M0–M4), then M5 after it, each ending in a commit Matt
    - Done when: the same prompt and aspect ratio run on mock, comfyui, and the paid provider by changing only `provider`, and a paid request over the cap is refused.
 4. **M3: Router and guardrails.** Provider order, fallback, paid gating on every step down the list, refusal handling, `list_providers` and `list_images`.
    - Done when: with ComfyUI stopped and order `comfyui,<paid>`, requests fail clearly by default (unhealthy skip does not reach the paid provider) and fall back to the paid provider only with the flag set; a generic `OPENAI_API_KEY` alone enables nothing.
-5. **M4: Ship it.** Eval run and report, README (setup for each provider, config table, architecture diagram, demo GIF of Claude generating, critiquing, and regenerating), npm publish.
+5. **M4: Ship it.** Eval run and report, README (setup for each provider, config table, architecture diagram, demo GIF of Claude generating, critiquing, and regenerating), packed-tarball install (originally npm publish; see the notes below).
    - Done when: a fresh machine can install it with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command and generate a mock image in under five minutes.
    - Changed at the start of M4 (Oct 3, 2026): the repo stays private and publishing is Matt's later call, so the install test runs against the packed tarball (`npx -y -p <tgz> darkroom-mcp`, empty npm cache). The license is MIT.
+   - Changed after M5 (Oct 3, 2026): the repo goes public as a portfolio piece and is never published to npm. `package.json` is marked `private` so `npm publish` refuses.
 
 6. **M5: Gemini provider** (added Oct 3, 2026). The second paid provider, with the same cost benchmark OpenAI got in M2.
    - Done when: the same prompt and aspect ratio run on mock, comfyui, openai, and gemini by changing only `provider`; a bad key fails clearly at $0 without the key appearing anywhere; with order `comfyui,gemini` and ComfyUI stopped, requests are refused by default and fall back to Gemini only with the flag; a Gemini request over the cap is refused; and the benchmark and eval are recorded.
@@ -241,7 +242,7 @@ Five milestones for v1 (M0–M4), then M5 after it, each ending in a commit Matt
 
 ## Phase 2 stretch goals
 
-None of these start until v1 is published; pick one at a time.
+None of these start until the repo is public; pick one at a time.
 
 - **Accessibility metadata.** A `save_alt_text` tool so Claude, which can already see the image, writes alt text into the sidecar; plus a contrast check of the image's dominant colors against supplied text colors (WCAG 2.2 AA ratios).
 - **Image-to-image and editing.** An optional `reference_image` input on providers that support it.
