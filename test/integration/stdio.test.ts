@@ -54,7 +54,13 @@ describe("darkroom over stdio", () => {
   it("lists all the tools, and generate_image's input and output schemas", async () => {
     const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
     const { tools } = await c.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["generate_image", "list_providers", "list_images", "save_alt_text"]);
+    expect(tools.map((t) => t.name)).toEqual([
+      "generate_image",
+      "list_providers",
+      "list_images",
+      "save_alt_text",
+      "check_contrast",
+    ]);
     const tool = tools[0];
     expect(tool?.description).toMatch(/only pass "provider" when the user explicitly asks/i);
     expect(tool?.inputSchema.required).toEqual(["prompt"]);
@@ -315,6 +321,41 @@ describe("darkroom over stdio", () => {
     expect(missing.isError).toBe(true);
     const [error] = missing.content;
     expect(error?.type === "text" && error.text).toMatch(/^Couldn't save alt text: .*isn't in Darkroom's output folder/);
+  });
+
+  it("check_contrast reports the mock's background and judges white text on it", async () => {
+    const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
+    const tool = (await c.listTools()).tools.find((t) => t.name === "check_contrast");
+    expect(tool?.annotations?.readOnlyHint).toBe(true);
+    const generated = (await call(c, { prompt: "a mug", seed: 7 })).structuredContent as { path: string };
+    const check = async (args: Record<string, unknown>) =>
+      (await c.callTool({ name: "check_contrast", arguments: { image: generated.path, ...args } })) as CallToolResult;
+
+    // The bottom-right corner is plain background: the mock's text is top-left, its footer bottom-left.
+    const result = await check({ text_colors: ["#ffffff", "#000"], region: { x: 0.75, y: 0.75, width: 0.25, height: 0.25 } });
+    expect(result.isError).toBeFalsy();
+    const out = result.structuredContent as {
+      region: { left: number; top: number; width: number; height: number };
+      dominant_colors: { color: string; share: number }[];
+      results: { text_color: string; worst_against: string; worst_ratio: number; body_text_aa: boolean }[];
+    };
+    expect(out.region).toEqual({ left: 384, top: 384, width: 128, height: 128 });
+    expect(out.dominant_colors).toHaveLength(1);
+    const background = out.dominant_colors[0]?.color;
+    expect(out.results.map((r) => [r.text_color, r.worst_against])).toEqual([
+      ["#ffffff", background],
+      ["#000000", background],
+    ]);
+    // White and black against the same background: their ratios multiply to 21 (within rounding).
+    const [white, black] = out.results;
+    expect((white?.worst_ratio ?? 0) * (black?.worst_ratio ?? 0)).toBeCloseTo(21, 0);
+    const [text] = result.content;
+    expect(text?.type === "text" && text.text).toMatch(/^Checked the region at 384,384 \(128×128px\) of /);
+
+    const bad = await check({ text_colors: ["white"] });
+    expect(bad.isError).toBe(true);
+    const [error] = bad.content;
+    expect(error?.type === "text" && error.text).toContain("Use a hex color");
   });
 
   it("fails at startup when DARKROOM_OPENAI_MODEL has no known prices", () => {

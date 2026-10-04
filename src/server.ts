@@ -5,6 +5,7 @@ import { Ledger } from "./ledger.js";
 import { createProviders, IMPLEMENTED_PROVIDERS } from "./providers/registry.js";
 import { Router } from "./router.js";
 import { Storage } from "./storage.js";
+import { registerCheckContrast } from "./tools/check-contrast.js";
 import { registerGenerateImage } from "./tools/generate-image.js";
 import { registerListImages } from "./tools/list-images.js";
 import { registerListProviders } from "./tools/list-providers.js";
@@ -22,5 +23,6 @@ export async function createServer(config: Config): Promise<McpServer> {
   registerListProviders(server, { config, router, ledger, implemented: IMPLEMENTED_PROVIDERS });
   registerListImages(server, { storage });
   registerSaveAltText(server, { storage });
+  registerCheckContrast(server, { storage });
   return server;
 }
