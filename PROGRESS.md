@@ -117,6 +117,16 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 ## Log
 
+### Oct 4, 2026 (UTC) — review of PR #11 (go public)
+
+A multi-model review of `09c0f2f` (opus and sonnet legs; the Gemini leg was skipped) posted 5 findings: 1 High, 1 Medium, 3 Low. All fixed on the branch:
+
+- **C4 (High):** `npm pack` doesn't build, and `dist/` is gitignored, so a fresh clone packed a 5-file tarball with no `dist/index.js`. Reproduced from a fresh clone first; `prepack` now runs the build, and the same clone packs 43 files, installs, and its bin lists the three tools over stdio.
+- **C5 (Medium):** `SECURITY.md`'s only channel, private vulnerability reporting, is off until it's turned on after the flip. It now says to open an issue asking for a private contact, with no details, if the link doesn't work.
+- **C1, C2, C3 (Low):** the old "No npm publish in M4" deviation is marked superseded and no longer gives publish steps; SPEC's M4 line says packed-tarball install; the README says the tarball is built from a clone.
+
+`npm run check` passes (354 tests).
+
 ### Oct 3, 2026 (UTC) — M5 done (tagged `m5`)
 
 Matt approved and PR #10 was merged (merge commit) after the review fixes. Spend for M5: about $1.22 on Gemini plus $0.0037 on OpenAI, within the agreed $1.50.
