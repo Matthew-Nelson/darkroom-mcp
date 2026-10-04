@@ -143,6 +143,8 @@ Testing:
 - `npm run test:comfyui`: 3 passed, and the mid-sampling abort was still interrupted. ComfyUI's log showed "Interrupting prompt …" and "Processing interrupted".
 - Spend: $0.
 
+Re-check of `bfb2a7e`: all 7 fixed, 1 new Low (N1). Once the interrupt or delete had gone through, the follow-up `/history` reads that refine the message could still fail, and that turned a working cancel into "couldn't cancel… may still be running", with the 500 text twice. Those reads are now best effort. 2 new tests, written first and failing; `npm run check`: 367 tests.
+
 ### Oct 4, 2026 (UTC) — ComfyUI cancel path fixed; awaiting review
 
 The M1 review's Low findings, rebuilt from the code: cancel and timeout errors were written before the cancel ran, so they always said the job "was cancelled" or "was stopped". That was wrong when ComfyUI couldn't be reached, when the cancel timed out, when it got an HTTP error (which counted as success), or when the job had already ended (including a cancel after ComfyUI finished, while Darkroom was fetching the image). The cancel now runs first and reports what it did (interrupted, dequeued before it started, already ended, or failed with the reason), and the message says that. A failed cancel says the job may still be running.
