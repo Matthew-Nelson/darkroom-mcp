@@ -42,7 +42,7 @@ Start a new Claude Code session and ask for an image, for example "make me a pla
 
 ### Packaged install
 
-`npm pack` builds `darkroom-mcp-0.1.0.tgz`, which installs anywhere with Node 22.12+ in one command, with no clone or build:
+Darkroom isn't on npm, so the tarball comes from a clone: after `npm install` (above), `npm pack` builds the server and packs it into `darkroom-mcp-0.1.0.tgz`. Copy that file anywhere with Node 22.12+ and it installs in one command, with no clone or build there:
 
 ```sh
 claude mcp add darkroom -e DARKROOM_PROVIDER_ORDER=mock -- npx -y -p /path/to/darkroom-mcp-0.1.0.tgz darkroom-mcp

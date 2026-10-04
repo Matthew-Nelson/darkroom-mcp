@@ -230,7 +230,7 @@ Five milestones for v1 (M0–M4), then M5 after it, each ending in a commit Matt
    - Done when: the same prompt and aspect ratio run on mock, comfyui, and the paid provider by changing only `provider`, and a paid request over the cap is refused.
 4. **M3: Router and guardrails.** Provider order, fallback, paid gating on every step down the list, refusal handling, `list_providers` and `list_images`.
    - Done when: with ComfyUI stopped and order `comfyui,<paid>`, requests fail clearly by default (unhealthy skip does not reach the paid provider) and fall back to the paid provider only with the flag set; a generic `OPENAI_API_KEY` alone enables nothing.
-5. **M4: Ship it.** Eval run and report, README (setup for each provider, config table, architecture diagram, demo GIF of Claude generating, critiquing, and regenerating), npm publish.
+5. **M4: Ship it.** Eval run and report, README (setup for each provider, config table, architecture diagram, demo GIF of Claude generating, critiquing, and regenerating), packed-tarball install (originally npm publish; see the notes below).
    - Done when: a fresh machine can install it with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command and generate a mock image in under five minutes.
    - Changed at the start of M4 (Oct 3, 2026): the repo stays private and publishing is Matt's later call, so the install test runs against the packed tarball (`npx -y -p <tgz> darkroom-mcp`, empty npm cache). The license is MIT.
    - Changed after M5 (Oct 3, 2026): the repo goes public as a portfolio piece and is never published to npm. `package.json` is marked `private` so `npm publish` refuses.
