@@ -73,7 +73,6 @@ Done when (agreed with Matt, Oct 3, 2026):
 ## Next up
 
 - M5 is done. Next steps wait for Matt's go-ahead: the M1 review's unaddressed Lows (cancel path), the Flux schnell template (optional), the demo GIF, then Phase 2.
-- Check Google's billing report for Oct 3 (UTC) once it updates: it should show about $1.22. Much more would mean the unlabeled output tokens are billed at the image rate (see the M5 log).
 
 ## Deviations from spec
 
@@ -81,7 +80,7 @@ Done when (agreed with Matt, Oct 3, 2026):
 - **Gemini is the pricier paid provider** (M5). A Gemini `draft` ($0.046) costs more than an OpenAI square `final` ($0.0133); a Gemini `final` ($0.0685) costs about 5× as much. It's documented as the second paid option, not a cheaper one.
 - **Gemini supports `seed`, approximately** (M5). The benchmark showed the same seed keeps the composition (slightly reframed) and carries from a 512px draft to a 1K final, so `supports.seed` is true. Its seed is a 32-bit signed integer; larger seeds are refused before sending, uncharged.
 - **`generateContent`, not the Interactions API** (M5). Google now steers new projects to the beta Interactions API, but recommends `generateContent` for stable deployments, and Interactions stores requests by default.
-- **Gemini's unlabeled output tokens are billed at the text rate** (M5). Each response reported 414–482 output tokens beyond the `IMAGE` count, with no modality and no `thoughtsTokenCount`. Darkroom prices them at the $3/M text and thinking rate, which puts its computed costs 2.2–2.6% over the per-image list price (that price covers only image tokens); at the image rate they'd be 37–59% over. This is Darkroom's own arithmetic, to be confirmed against Google's billing report.
+- **Gemini's unlabeled output tokens are billed at the text rate** (M5). Each response reported 414–482 output tokens beyond the `IMAGE` count, with no modality and no `thoughtsTokenCount`. Darkroom prices them at the $3/M text and thinking rate, which puts its computed costs 2.2–2.6% over the per-image list price (that price covers only image tokens); at the image rate they'd be 37–59% over. Confirmed by Google's billing report (Matt, Oct 4, 2026): $1.214 billed for Oct 3 (UTC), against Darkroom's $1.215.
 
 - **Public repo, no npm package** (Matt, Oct 3, 2026). Darkroom is a portfolio piece: the repo goes public and is never published to npm. `package.json` has `"private": true` so `npm publish` refuses (`npm pack` still works), the dead `prepublishOnly` hook is gone (`prepack` now runs the build, so a fresh clone's tarball includes `dist/`), and SPEC's "published package" goal and Phase 2 gate now mean the public repo. Before going public, all 106 commits, PR text, and review comments were searched for keys: only test fakes. Commit author emails stay as they are (rewriting history would break the tags and PR merges).
 - **No demo GIF in v1** (Matt, Oct 3, 2026). SPEC's M4 lists a README GIF of Claude generating, critiquing, and regenerating. Skipped for now; the README's visuals are the eval thumbnails. It can be added later as its own `docs/` PR (record the terminal, then trim and convert with ffmpeg).
@@ -115,6 +114,10 @@ Done when (agreed with Matt, Oct 3, 2026):
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 4, 2026 (UTC) — Gemini billing confirmed
+
+Google's billing report shows $1.214 for Oct 3 (UTC). Darkroom's ledger for the same calls (contract run, benchmark, seed tests, acceptance, eval) adds up to $1.215, 0.1% over. Pricing the unlabeled output tokens at the image rate would have put it at roughly $1.6–1.8, so the text-rate reading is right and Darkroom's per-call costs match what Google bills. No code change: the estimate and actual-cost math stay as they are.
 
 ### Oct 4, 2026 (UTC) — repo made public
 
@@ -176,7 +179,7 @@ Ledger: $0.229446. All four spelled "DARKROOM" correctly, drafts included. Unlik
 
 **Findings:**
 
-- Responses are `image/jpeg`, one part, with a `thoughtSignature` but no `thought: true` parts or interim images, and no `thoughtsTokenCount`. Output runs 414–482 tokens over the `IMAGE` count with no modality. Billing those at the $3/M text and thinking rate gives costs 2.2–2.6% over the per-image list price; at the image rate they'd be 37–59% over, so the text rate is the likely reading. (This first said "within 1%" and "~55%"; corrected after review finding A2.) To confirm against Google's billing report once it updates (about $0.44 so far today, Oct 3 UTC).
+- Responses are `image/jpeg`, one part, with a `thoughtSignature` but no `thought: true` parts or interim images, and no `thoughtsTokenCount`. Output runs 414–482 tokens over the `IMAGE` count with no modality. Billing those at the $3/M text and thinking rate gives costs 2.2–2.6% over the per-image list price; at the image rate they'd be 37–59% over, so the text rate is the likely reading. (This first said "within 1%" and "~55%"; corrected after review finding A2.) (Confirmed Oct 4: Google billed $1.214 for the day against Darkroom's $1.215; see the log.)
 - Latency 7–11 s, like OpenAI (8–19 s in M2).
 - Benchmark images: `~/.darkroom/benchmark-m5/`.
 
