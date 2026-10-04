@@ -18,13 +18,13 @@ The v1 bar is three working tools, three providers (mock, local, one paid) behin
 2. Swap providers with one config change and no code change; adding a provider means one new provider file plus one line in the provider registry.
 3. Never spend money silently: paid providers are opt-in by explicit config (not by the mere presence of an API key), with a daily spend cap and a cost on every result.
 4. Return the image to Claude so it can critique and refine its own output.
-5. Ship resume-grade: tests, a small eval report, a README with a demo GIF, and a public repo that installs from source or a tarball (no npm package; see M4).
-6. Have fun and keep scope tight: v1 in roughly two weekends, with the second paid provider and the Flux/SDXL templates as the first post-v1 commits.
+5. Ship resume-grade: tests, a small eval report, a README, and a public repo that installs from source or a tarball (no npm package; see M4).
+6. Have fun and keep scope tight: v1 in roughly two weekends, with the second paid provider as the first post-v1 commit.
 
 **Non-goals for v1**
 
-- Image editing, inpainting, or image-to-image (Phase 2).
-- Remote or hosted deployment (Phase 2, on AWS).
+- Image editing, inpainting, or image-to-image (Phase 2: M7).
+- Remote or hosted deployment (dropped Oct 4, 2026: Darkroom stays a local tool).
 - A web UI or gallery.
 - Training or fine-tuning models.
 - Calling Claude from inside the server; Claude is the client, not a dependency.
@@ -72,7 +72,7 @@ v1 ships three providers, each a single file implementing the `ImageProvider` in
 
 | Provider | Cost | How it works | Notes |
 | --- | --- | --- | --- |
-| `comfyui` (default) | Free | HTTP to a local ComfyUI server: POST a workflow JSON to `/prompt`, poll `/history/{id}`, fetch bytes from `/view` | Ship one Z-Image Turbo template (GGUF, via the ComfyUI-GGUF plugin) in `workflows/`; Flux schnell and SDXL templates follow post-v1. Inject prompt, size, and seed by locating nodes through a small mapping file next to each template, not by hard-coded node ID. The mapping file also lists the template's model filenames, so the health check can verify each one exists. Exact files, sources, and timings are in "Local model spike results" below. Slow on Apple Silicon: default timeout 300s, configurable. |
+| `comfyui` (default) | Free | HTTP to a local ComfyUI server: POST a workflow JSON to `/prompt`, poll `/history/{id}`, fetch bytes from `/view` | Ship one Z-Image Turbo template (GGUF, via the ComfyUI-GGUF plugin) in `workflows/` (the only template: Flux schnell and SDXL were dropped on Oct 4, 2026, though the mapping format still allows more). Inject prompt, size, and seed by locating nodes through a small mapping file next to each template, not by hard-coded node ID. The mapping file also lists the template's model filenames, so the health check can verify each one exists. Exact files, sources, and timings are in "Local model spike results" below. Slow on Apple Silicon: default timeout 300s, configurable. |
 | `openai` | Paid, token-billed ($30 per million image output tokens for `gpt-image-2.5-flare`): measured in the M2 benchmark at $0.0053 for a `low` 816×816 draft and $0.0528 for a `high` 1024×1024 image (a `high` 1360×768: $0.0298). `final` uses `medium`: measured at $0.0089 for a 3:2 1248×832 final, about $0.013 projected for a square. Record actual usage from the response | OpenAI Images API (`POST /v1/images/generations`) with a gpt-image model; default `gpt-image-2.5-flare` | Best typography and instruction following, and the cheaper paid option as of Oct 2026. Any size in multiples of 16, ratio 1:3 to 3:1, at least 655,360 pixels; no seed. |
 | `gemini` | Paid, $0.045 (512) to $0.067 (1K) per image list price for `gemini-3.1-flash-image` ($0.034 at 1K only for Flash Lite Image); token-billed, so record actual usage from the response. Measured in M5 at $0.046 for a `draft` (512) and $0.0685 for a `final` (1K), the same at every aspect ratio | `generateContent` (`POST /v1beta/models/{model}:generateContent`) with `responseModalities: ["IMAGE"]` and `imageConfig` (`aspectRatio`, `imageSize`); default `gemini-3.1-flash-image` | No free tier; do not assume one. Sizes are set by aspect ratio and a size step (`512`, `1K`), not pixels. The seed is a 32-bit integer that keeps the composition but doesn't repeat an image exactly. Send the key in the `x-goog-api-key` header, never as a `?key=` query param, so it can't leak via URLs in errors. |
 | `mock` | Free | Generates a placeholder PNG (prompt text and seed drawn on a colored background, color derived from the seed) with no network | Used in tests and CI, and for demoing without a GPU or keys. Text rendering depends on system fonts, so tests assert on dimensions and format, never on image bytes or hashes. |
@@ -192,7 +192,7 @@ Before writing provider code, we installed ComfyUI on Matt's machine and timed t
 
 Z-Image Turbo at smaller sizes (measured in an earlier round with less free memory, so read these as upper bounds): **768px in 153s, 512px in 98s**, with lettering still correct at 512. Time shrinks far less than the pixel count, because a fixed cost on each step (probably unpacking the GGUF weights on MPS) dominates.
 
-**Decision:** Z-Image Turbo is the v1 default for its text rendering and composition. Flux schnell is about 30% faster per image and is the first post-v1 template; switch the default to it if speed matters more than lettering in practice.
+**Decision:** Z-Image Turbo is the v1 default for its text rendering and composition. Flux schnell is about 30% faster per image; it was planned as the first post-v1 template, then dropped (Oct 4, 2026).
 
 **Findings that changed the spec:**
 
@@ -207,13 +207,13 @@ Z-Image Turbo at smaller sizes (measured in an earlier round with less free memo
 
 **Not yet tried:** Z-Image Q8_0 GGUF (7.2GB). It may be faster per step because Q8 is cheaper to unpack, but it could push peak memory toward 14GB.
 
-**Model files used** (all ungated, in `~/ComfyUI/models/`):
+**Model files used** (all ungated, in `~/ComfyUI/models/`; only the first three are needed now, the rest were for the spike):
 
 | Folder | File | Source |
 | --- | --- | --- |
 | `unet/` | `z_image_turbo-Q4_K_M.gguf` | `huggingface.co/jayn7/Z-Image-Turbo-GGUF` |
 | `clip/` | `Qwen3-4B-Q4_K_M.gguf` (loader type `lumina2`) | `huggingface.co/unsloth/Qwen3-4B-GGUF` |
-| `vae/` | `flux_ae.safetensors` (shared by Z-Image and Flux) | `huggingface.co/Comfy-Org/z_image_turbo`, `split_files/vae/ae.safetensors` |
+| `vae/` | `flux_ae.safetensors` (Z-Image's VAE, despite the name; Flux used it too) | `huggingface.co/Comfy-Org/z_image_turbo`, `split_files/vae/ae.safetensors` |
 | `unet/` | `flux1-schnell-Q4_K_S.gguf` | `huggingface.co/city96/FLUX.1-schnell-gguf` |
 | `clip/` | `t5-v1_1-xxl-encoder-Q4_K_M.gguf`, `clip_l.safetensors` | `huggingface.co/city96/t5-v1_1-xxl-encoder-gguf`, `huggingface.co/comfyanonymous/flux_text_encoders` |
 | `checkpoints/` | `sd_xl_base_1.0.safetensors` | `huggingface.co/stabilityai/stable-diffusion-xl-base-1.0` |
@@ -230,7 +230,7 @@ Five milestones for v1 (M0–M4), then M5 after it, each ending in a commit Matt
    - Done when: the same prompt and aspect ratio run on mock, comfyui, and the paid provider by changing only `provider`, and a paid request over the cap is refused.
 4. **M3: Router and guardrails.** Provider order, fallback, paid gating on every step down the list, refusal handling, `list_providers` and `list_images`.
    - Done when: with ComfyUI stopped and order `comfyui,<paid>`, requests fail clearly by default (unhealthy skip does not reach the paid provider) and fall back to the paid provider only with the flag set; a generic `OPENAI_API_KEY` alone enables nothing.
-5. **M4: Ship it.** Eval run and report, README (setup for each provider, config table, architecture diagram, demo GIF of Claude generating, critiquing, and regenerating), packed-tarball install (originally npm publish; see the notes below).
+5. **M4: Ship it.** Eval run and report, README (setup for each provider, config table, architecture diagram; a demo GIF was planned and dropped), packed-tarball install (originally npm publish; see the notes below).
    - Done when: a fresh machine can install it with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command and generate a mock image in under five minutes.
    - Changed at the start of M4 (Oct 3, 2026): the repo stays private and publishing is Matt's later call, so the install test runs against the packed tarball (`npx -y -p <tgz> darkroom-mcp`, empty npm cache). The license is MIT.
    - Changed after M5 (Oct 3, 2026): the repo goes public as a portfolio piece and is never published to npm. `package.json` is marked `private` so `npm publish` refuses.
@@ -238,20 +238,26 @@ Five milestones for v1 (M0–M4), then M5 after it, each ending in a commit Matt
 6. **M5: Gemini provider** (added Oct 3, 2026). The second paid provider, with the same cost benchmark OpenAI got in M2.
    - Done when: the same prompt and aspect ratio run on mock, comfyui, openai, and gemini by changing only `provider`; a bad key fails clearly at $0 without the key appearing anywhere; with order `comfyui,gemini` and ComfyUI stopped, requests are refused by default and fall back to Gemini only with the flag; a Gemini request over the cap is refused; and the benchmark and eval are recorded.
 
-**Immediately after v1:** add the second paid provider, Gemini, as a single, self-contained commit (the "one file plus one registry line" demo), then the Flux schnell and SDXL templates. (Gemini became M5: the provider is one file plus one registry line, but it landed with two config variables, a shared-helpers refactor, and the benchmark as separate commits.) Gemini gets the same cost benchmark OpenAI got in M2: real `draft` and `final` calls at a few aspect ratios through the ledger, actual cost compared with list price and with OpenAI, its estimates calibrated from the results, and the numbers added to the README's cost table and the eval report.
+**Immediately after v1:** add the second paid provider, Gemini, as a single, self-contained commit (the "one file plus one registry line" demo). (The Flux schnell and SDXL templates planned after it were dropped on Oct 4, 2026.) (Gemini became M5: the provider is one file plus one registry line, but it landed with two config variables, a shared-helpers refactor, and the benchmark as separate commits.) Gemini gets the same cost benchmark OpenAI got in M2: real `draft` and `final` calls at a few aspect ratios through the ledger, actual cost compared with list price and with OpenAI, its estimates calibrated from the results, and the numbers added to the README's cost table and the eval report.
 
-## Phase 2 stretch goals
+## Phase 2 roadmap
 
-None of these start until the repo is public; pick one at a time.
+Set by Matt on Oct 4, 2026, after the repo went public. One milestone at a time, in this order, each with its own branch, PR, and tag. Each milestone's "done when" below is a draft, agreed with Matt at the milestone's start.
 
-- **Accessibility metadata.** A `save_alt_text` tool so Claude, which can already see the image, writes alt text into the sidecar; plus a contrast check of the image's dominant colors against supplied text colors (WCAG 2.2 AA ratios).
-- **Image-to-image and editing.** An optional `reference_image` input on providers that support it.
-- **Remote deployment on AWS.** Streamable HTTP transport, Lambda or ECS behind API Gateway, Cognito OAuth, and S3 for images, with local ComfyUI dropped or reached over a tunnel.
-- **Prompt presets.** Named styles (icon, hero image, diagram-style illustration) that expand into tuned prompts per provider.
+- **Fix: ComfyUI cancel path** (the M1 review's Low findings; a `fix/` PR, not a milestone). Cancel and timeout errors say the ComfyUI job "was cancelled" or "was stopped" before the cancel runs, and the cancel's own failures are only logged, so the message can claim a stop that never happened (ComfyUI unreachable, or the cancel timing out), or one that wasn't needed (the job had already finished). The review's report wasn't kept, so the findings are rebuilt from the code.
+- **M6: Accessibility metadata.** A `save_alt_text` tool so Claude, which can already see the image, writes alt text into the image's sidecar, and `list_images` returns it. Plus a contrast check of the image's dominant colors against supplied text colors, reporting WCAG 2.2 ratios and AA pass or fail (4.5:1 for body text, 3:1 for large text). Dominant colors come from sharp, with no new dependency.
+   - Draft done when: Claude generates an image, writes its alt text, and `list_images` shows it; the contrast check gives the right ratios for known color pairs and a sensible verdict for a real image. Mock-only tests, no spend.
+   - To settle at the start: whether the contrast check is its own tool or an option on `save_alt_text`, and how an image is identified (path, or a name from `list_images`).
+- **M7: Image-to-image and editing.** An optional `reference_image` input on `generate_image` (a local file), with `supports.referenceImage` on each provider. OpenAI and Gemini both take an input image; ComfyUI needs an image-to-image template; mock echoes the input. Unlike `seed` or `negative_prompt`, which a provider without support ignores with a note in the result, a reference can't be quietly dropped (the image would ignore it), so a provider that can't use one is skipped or refuses; which one is settled at the start.
+   - Draft done when: the same reference image and prompt run on every provider that supports it by changing only `provider`, and a provider without support refuses clearly. A small paid benchmark (cost agreed first) calibrates the estimates.
+
+**Later, not scheduled:** a GitHub release for `v0.1.0` (or the version current by then), with notes.
+
+**Dropped (Matt, Oct 4, 2026):** the demo GIF, the Flux schnell and SDXL templates, prompt presets, and remote deployment on AWS.
 
 ## Instructions for the coding agent
 
-Build milestone by milestone and stop for review after each; do not start Phase 2.
+Build milestone by milestone and stop for review after each; start each Phase 2 milestone only with Matt's go-ahead.
 
 - Before writing provider code, check current docs for the MCP TypeScript SDK, the OpenAI Images API, the Gemini image API, and the ComfyUI HTTP API. Model names, parameters, supported sizes, seed support, and prices change; update this spec's config defaults if they have.
 - Stack: Node 22+ (Node 20 reached end-of-life in April 2026), TypeScript strict, `@modelcontextprotocol/sdk`, zod, vitest, sharp (for previews and the mock PNG). Ask before adding any other runtime dependency.

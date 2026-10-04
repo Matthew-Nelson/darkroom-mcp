@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M5 done (Gemini provider, tagged `m5`) · repo public, tagged `v0.1.0` · Phase 2 not started
+## Current: v1 + M5 done, repo public (`v0.1.0`) · Phase 2 roadmap set · next: cancel-path fix
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -12,6 +12,10 @@
 | M3: Router and guardrails | done | `m3` |
 | M4: Ship it | done | `m4` |
 | M5: Gemini provider | done | `m5` |
+| Fix: ComfyUI cancel path (M1 review Lows) | not started | — |
+| M6: Accessibility metadata | not started | `m6` |
+| M7: Image-to-image and editing | not started | `m7` |
+| Later: GitHub release | not scheduled | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
 
@@ -53,7 +57,7 @@ Status values: `not started` → `in progress` → `awaiting review` → `done` 
 - [x] `npm run check` passes (293 tests, after review fixes)
 - [x] Done when (adapted, see Deviations): a clean install from the packed tarball with one `claude mcp add ... -e DARKROOM_PROVIDER_ORDER=mock -- npx ...` command generates a mock image in under five minutes (19 s)
 - [x] Eval run and report committed (20 of 20 images, $0.10)
-- [x] ~~Demo GIF~~ skipped for v1 (Matt, Oct 3, 2026; see Deviations)
+- [x] ~~Demo GIF~~ skipped for v1 (Matt, Oct 3, 2026), then dropped (Oct 4; see Deviations)
 - [x] Matt approved and merged PR #8 (after a multi-model review; all 11 findings fixed)
 - [x] Tagged `m4`
 
@@ -72,7 +76,12 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 ## Next up
 
-- M5 is done. Next steps wait for Matt's go-ahead: the M1 review's unaddressed Lows (cancel path), the Flux schnell template (optional), the demo GIF, then Phase 2.
+Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short plan for Matt:
+
+1. **Fix: ComfyUI cancel path** (`fix/comfyui-cancel`): rebuild the M1 review's Low findings from the code, a failing test for each, then fix. Approved by Matt (Oct 4).
+2. **M6: Accessibility metadata** (`m6/…`): `save_alt_text` and a WCAG contrast check.
+3. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`.
+4. **Later:** a GitHub release.
 
 ## Deviations from spec
 
@@ -83,7 +92,8 @@ Done when (agreed with Matt, Oct 3, 2026):
 - **Gemini's unlabeled output tokens are billed at the text rate** (M5). Each response reported 414–482 output tokens beyond the `IMAGE` count, with no modality and no `thoughtsTokenCount`. Darkroom prices them at the $3/M text and thinking rate, which puts its computed costs 2.2–2.6% over the per-image list price (that price covers only image tokens); at the image rate they'd be 37–59% over. Confirmed by Google's billing report (Matt, Oct 4, 2026): $1.214 billed for Oct 3 (UTC), against Darkroom's $1.215.
 
 - **Public repo, no npm package** (Matt, Oct 3, 2026). Darkroom is a portfolio piece: the repo goes public and is never published to npm. `package.json` has `"private": true` so `npm publish` refuses (`npm pack` still works), the dead `prepublishOnly` hook is gone (`prepack` now runs the build, so a fresh clone's tarball includes `dist/`), and SPEC's "published package" goal and Phase 2 gate now mean the public repo. Before going public, all 106 commits, PR text, and review comments were searched for keys: only test fakes. Commit author emails stay as they are (rewriting history would break the tags and PR merges).
-- **No demo GIF in v1** (Matt, Oct 3, 2026). SPEC's M4 lists a README GIF of Claude generating, critiquing, and regenerating. Skipped for now; the README's visuals are the eval thumbnails. It can be added later as its own `docs/` PR (record the terminal, then trim and convert with ffmpeg).
+- **Roadmap trimmed** (Matt, Oct 4, 2026). Dropped: the demo GIF, the Flux schnell and SDXL templates, prompt presets, and remote deployment on AWS. Phase 2 is now M6 (accessibility metadata) then M7 (image-to-image), after the cancel-path fix. The spike's records (model table, `scripts/bench-comfyui.py`, fixtures naming Flux files) stay as history.
+- **No demo GIF in v1** (Matt, Oct 3, 2026). SPEC's M4 lists a README GIF of Claude generating, critiquing, and regenerating. Skipped, then dropped on Oct 4; the README's visuals are the eval thumbnails.
 - **No npm publish in M4** (Matt, Oct 3, 2026: the repo stays private, and publishing is undecided; superseded after M5 by "Public repo, no npm package" above). The acceptance test ran against the packed tarball instead (`npm pack`, then `claude mcp add ... -- npx -y -p <tgz> darkroom-mcp` with an empty npm cache), which exercises the same install path. License: MIT.
 - **The eval budget is per UTC day** (M4). The eval keeps its own ledger in `DARKROOM_EVAL_OUTPUT_DIR` (default `~/.darkroom/eval`, apart from the images `list_images` shows), using the same daily-keyed ledger code with `DARKROOM_EVAL_BUDGET_USD` (default $0.50) as the cap. A run that would spend anything stops after printing its estimate unless given `--yes`. The cache key also includes aspect ratio and quality.
 - **`tsx` is a new devDependency** (M4), to run `eval/run.ts` straight from the TypeScript sources with the real router. No new runtime dependency.
