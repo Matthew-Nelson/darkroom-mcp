@@ -35,7 +35,7 @@ export interface ComfyUIOptions {
 type CancelOutcome =
   | { kind: "interrupted" } // our job was running; ComfyUI stops it at the next step
   | { kind: "dequeued" } // it hadn't started, and it's gone from the queue
-  | { kind: "ended" } // it was already in /history: finished, failed, or stopped by someone else
+  | { kind: "ended" } // it ended on its own just before the cancel: finished, failed, or stopped by someone else
   | { kind: "failed"; reason: string };
 
 export class ComfyUIError extends Error {
@@ -89,8 +89,7 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
 
   async function waitForHistory(promptId: string, signal: AbortSignal): Promise<HistoryEntry> {
     for (;;) {
-      const history = (await getJson(`/history/${promptId}`, signal)) as Record<string, HistoryEntry>;
-      const entry = history[promptId];
+      const entry = await historyEntry(promptId, signal);
       if (entry) return entry;
       await sleep(pollIntervalMs, undefined, { signal });
     }
@@ -109,25 +108,43 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
    * Stops our job so the GPU frees up: removes it from the queue if it's still
    * waiting, and interrupts it only if it's the one running. A bare /interrupt
    * would stop whatever is running, which might be someone else's job.
+   *
+   * Never throws: it reports what it actually did, checking /history to tell a
+   * job it stopped from one that ended on its own first, and returns `failed`
+   * (with the reason) if ComfyUI errors or doesn't answer within cancelTimeoutMs.
    */
   async function cancel(promptId: string): Promise<CancelOutcome> {
     const signal = AbortSignal.timeout(cancelTimeoutMs);
+    const isOurs = (item: unknown[]) => item[1] === promptId;
     try {
-      await post("/queue", signal, { delete: [promptId] });
-      const queue = (await getJson("/queue", signal)) as QueueResponse;
-      if (queue.queue_running?.some((item) => item[1] === promptId)) {
-        await post("/interrupt", signal, { prompt_id: promptId });
-        log("info", "interrupted ComfyUI job", { prompt_id: promptId });
-        return { kind: "interrupted" };
+      // A submit cut off mid-request can still be queued after the first delete, so a pending job gets a second one.
+      for (let attempt = 1; ; attempt++) {
+        await post("/queue", signal, { delete: [promptId] });
+        const queue = (await getJson("/queue", signal)) as QueueResponse;
+        if (queue.queue_running?.some(isOurs)) {
+          await post("/interrupt", signal, { prompt_id: promptId });
+          log("info", "interrupted ComfyUI job", { prompt_id: promptId });
+          // /interrupt does nothing if the job ended after the /queue read; then it's in /history without an interrupt.
+          const entry = await historyEntry(promptId, signal);
+          const interrupted = !entry || entry.status?.messages?.some(([type]) => type === "execution_interrupted");
+          return { kind: interrupted ? "interrupted" : "ended" };
+        }
+        if (!queue.queue_pending?.some(isOurs)) break;
+        if (attempt === 2) throw new ComfyUIError("It's still in ComfyUI's queue after two deletes.");
       }
       // Not running and not queued: either the delete caught it waiting, or it ended before the cancel got there.
-      const history = (await getJson(`/history/${promptId}`, signal)) as Record<string, HistoryEntry>;
-      return { kind: history[promptId] ? "ended" : "dequeued" };
+      return { kind: (await historyEntry(promptId, signal)) ? "ended" : "dequeued" };
     } catch (err) {
-      const reason = signal.aborted ? `ComfyUI didn't answer the cancel within ${cancelTimeoutMs / 1000}s.` : errorMessage(err);
+      const reason = signal.aborted
+        ? `ComfyUI didn't answer the cancel within ${cancelTimeoutMs / 1000}s.`
+        : errorMessage(err);
       log("warn", "couldn't cancel ComfyUI job", { prompt_id: promptId, error: reason });
       return { kind: "failed", reason };
     }
+  }
+
+  async function historyEntry(promptId: string, signal: AbortSignal): Promise<HistoryEntry | undefined> {
+    return ((await getJson(`/history/${promptId}`, signal)) as Record<string, HistoryEntry>)[promptId];
   }
 
   function watchProgress(clientId: string, isOurs: (id: unknown) => boolean, onProgress: ProgressListener) {
@@ -202,11 +219,13 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
       const run = AbortSignal.any([signal, timeout]);
       const clientId = randomUUID();
       let promptId: string = randomUUID();
+      let submitted = false;
       let finished = false;
       const socket = onProgress && watchProgress(clientId, (id) => id === promptId, onProgress);
 
       try {
         promptId = await submit(graph, promptId, clientId, run);
+        submitted = true;
         onProgress?.({ message: "Queued in ComfyUI" });
         const entry = await waitForHistory(promptId, run);
         finished = true;
@@ -223,15 +242,32 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
         };
       } catch (err) {
         socket?.close(); // no progress updates while the cancel runs
+        // Read these before the cancel: either can flip while it runs, which would mislabel the error.
+        const cancelled = signal.aborted;
+        const timedOut = timeout.aborted && !cancelled;
+        const seconds = Math.round(opts.timeoutMs / 1000);
+        if (finished) {
+          if (timedOut) {
+            throw new ComfyUIError(
+              `ComfyUI finished the job, but Darkroom couldn't fetch the image within ${seconds}s (COMFYUI_TIMEOUT_MS).`,
+            );
+          }
+          if (cancelled) {
+            throw new ComfyUIError("Generation was cancelled after ComfyUI finished the job, so the image wasn't saved.");
+          }
+          throw err;
+        }
+        // A submit that failed outright (rejected, or ComfyUI unreachable) queued nothing; one cut off by an abort may have.
+        if (!submitted && !run.aborted) throw err;
         // The cancel runs before the message is written, so the message can say what it really did.
-        const outcome: CancelOutcome = finished ? { kind: "ended" } : await cancel(promptId);
-        if (timeout.aborted && !signal.aborted) {
+        const outcome = describeCancel(await cancel(promptId));
+        if (timedOut) {
           throw new ComfyUIError(
-            `ComfyUI didn't finish within ${Math.round(opts.timeoutMs / 1000)}s (COMFYUI_TIMEOUT_MS, which includes time waiting in ComfyUI's queue). ${describeCancel(outcome)}`,
+            `ComfyUI didn't finish within ${seconds}s (COMFYUI_TIMEOUT_MS, which includes time waiting in ComfyUI's queue). ${outcome}`,
           );
         }
-        if (signal.aborted) throw new ComfyUIError(`Generation was cancelled. ${describeCancel(outcome)}`);
-        throw err;
+        if (cancelled) throw new ComfyUIError(`Generation was cancelled. ${outcome}`);
+        throw new ComfyUIError(`${errorMessage(err)} ${outcome}`);
       } finally {
         socket?.close();
       }
@@ -294,7 +330,7 @@ function describeCancel(outcome: CancelOutcome): string {
     case "dequeued":
       return "The job hadn't started, and it's no longer in ComfyUI's queue.";
     case "ended":
-      return "The ComfyUI job had already ended, so there was nothing to stop.";
+      return "The ComfyUI job ended just as Darkroom went to cancel it, so there was nothing to stop.";
     case "failed":
       return `Darkroom couldn't cancel the ComfyUI job, so it may still be running. ${outcome.reason}`;
   }
