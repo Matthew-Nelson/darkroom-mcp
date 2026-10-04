@@ -8,7 +8,7 @@ import { formatUsd } from "../ledger.js";
 import { log } from "../log.js";
 import { isErrno, type Storage } from "../storage.js";
 
-const DESCRIPTION = `List recently generated images, newest first, from the metadata saved next to each one: file path, prompt, provider, model, size, seed, and cost.
+const DESCRIPTION = `List recently generated images, newest first, from the metadata saved next to each one: file path, prompt, provider, model, size, seed, cost, and alt text (if saved with save_alt_text).
 
 Use this when the user refers to an earlier image ("the lighthouse from before") or asks what has been generated. To render an earlier draft as final, pass its prompt and seed back to generate_image. It reads files only; it generates nothing and costs nothing.`;
 
@@ -28,6 +28,8 @@ const sidecarSchema = z.object({
   height: z.number(),
   seed: z.number().nullable(),
   cost_usd: z.number(),
+  // A hand-edited alt_text that isn't a string is dropped rather than hiding the image.
+  alt_text: z.string().optional().catch(undefined),
 });
 
 const imageSchema = z.object({
@@ -43,6 +45,7 @@ const imageSchema = z.object({
   height: z.number(),
   seed: z.number().nullable(),
   cost_usd: z.number(),
+  alt_text: z.string().nullable().describe("null until alt text is saved with save_alt_text"),
 });
 
 const outputSchema = {
@@ -100,6 +103,7 @@ async function readImage(root: string, sidecarName: string): Promise<Image | und
     height: s.height,
     seed: s.seed,
     cost_usd: s.cost_usd,
+    alt_text: s.alt_text ?? null,
   };
 }
 
@@ -145,6 +149,7 @@ function summarize(o: Output): string {
   ];
   for (const i of o.images) {
     lines.push(`${i.created_at} · ${i.provider} · ${i.width}×${i.height} · ${formatUsd(i.cost_usd)} · ${i.path}\n  ${i.prompt}`);
+    if (i.alt_text !== null) lines.push(`  Alt text: ${i.alt_text}`);
   }
   if (o.unreadable > 0) lines.push(`Skipped ${o.unreadable} unreadable sidecar(s).`);
   return lines.join("\n");

@@ -8,6 +8,7 @@ import { Storage } from "./storage.js";
 import { registerGenerateImage } from "./tools/generate-image.js";
 import { registerListImages } from "./tools/list-images.js";
 import { registerListProviders } from "./tools/list-providers.js";
+import { registerSaveAltText } from "./tools/save-alt-text.js";
 
 // Resolved relative to this module so it works from dist/ and from an npx install.
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
@@ -20,5 +21,6 @@ export async function createServer(config: Config): Promise<McpServer> {
   registerGenerateImage(server, { router, storage });
   registerListProviders(server, { config, router, ledger, implemented: IMPLEMENTED_PROVIDERS });
   registerListImages(server, { storage });
+  registerSaveAltText(server, { storage });
   return server;
 }
