@@ -12,7 +12,6 @@ const DESCRIPTION = `List recently generated images, newest first, from the meta
 
 Use this when the user refers to an earlier image ("the lighthouse from before") or asks what has been generated. To render an earlier draft as final, pass its prompt and seed back to generate_image. It reads files only; it generates nothing and costs nothing.`;
 
-
 // Files are read a few at a time, so a big folder can't exhaust file handles.
 const READ_BATCH = 64;
 
