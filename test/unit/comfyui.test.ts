@@ -35,6 +35,7 @@ interface FakeOptions {
   historyStatus?: number; // HTTP status of /history while polling (before any cancel)
   historyFailsDuringCancel?: boolean; // /history keeps returning historyStatus during the cancel too
   hangView?: boolean; // /view never answers; it rejects once the request is aborted
+  onView?: () => void; // called when /view is requested, i.e. once ComfyUI has finished the job
   unreachable?: boolean | "bad port";
   missingClasses?: string[];
   missingModels?: string[];
@@ -108,7 +109,10 @@ function fakeComfy(o: FakeOptions = {}) {
       const entry = fixture(landed ? "history-interrupted.json" : (name ?? "history-success.json"));
       return json(rekey(entry, firstKey(entry), promptId));
     }
-    if (path === "/view") return o.hangView ? hang(init?.signal) : Promise.resolve(new Response(viewPng));
+    if (path === "/view") {
+      o.onView?.();
+      return o.hangView ? hang(init?.signal) : Promise.resolve(new Response(viewPng));
+    }
     if (method === "GET" && path === "/queue") {
       const item = [1, promptId, {}, {}, ["output"]];
       const pending = o.pending === "always" || (o.pending === "once" && deletes < 2);
@@ -345,8 +349,15 @@ describe("comfyui provider: cancellation and timeout", () => {
   });
 
   it("says the image wasn't saved when cancelled after ComfyUI finished, and doesn't touch the queue", async () => {
-    const comfy = fakeComfy({ hangView: true });
-    await expect(comfy.provider().generate(request, abortSoon())).rejects.toThrow(
+    // Cancelled once the fetch starts, not after a fixed delay, which a loaded machine can outrun.
+    const controller = new AbortController();
+    const onView = () => {
+      queueMicrotask(() => {
+        controller.abort();
+      });
+    };
+    const comfy = fakeComfy({ hangView: true, onView });
+    await expect(comfy.provider().generate(request, controller.signal)).rejects.toThrow(
       "Generation was cancelled after ComfyUI finished the job, so the image wasn't saved.",
     );
     expect(comfy.posted("/queue")).toEqual([]);
@@ -355,7 +366,8 @@ describe("comfyui provider: cancellation and timeout", () => {
 
   it("doesn't say ComfyUI didn't finish when the timeout hits while fetching the finished image", async () => {
     const comfy = fakeComfy({ hangView: true });
-    await expect(comfy.provider({ timeoutMs: 30 }).generate(request, signal())).rejects.toThrow(
+    // Long enough for submit and the history polls to finish first even when the full suite loads the machine.
+    await expect(comfy.provider({ timeoutMs: 400 }).generate(request, signal())).rejects.toThrow(
       "ComfyUI finished the job, but Darkroom couldn't fetch the image within 0s (COMFYUI_TIMEOUT_MS).",
     );
     expect(comfy.posted("/queue")).toEqual([]);
