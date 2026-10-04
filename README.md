@@ -4,7 +4,7 @@ An MCP server that gives Claude Code an image generation tool. Claude writes the
 
 Providers are swappable: a free local model (Z-Image Turbo via ComfyUI) by default, OpenAI or Gemini as opt-in paid options, and a `mock` provider for tests and demos.
 
-> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` and `gemini` providers work, with fallback between them, a daily spend cap, and three tools. It isn't published to npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
+> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` and `gemini` providers work, with fallback between them, a daily spend cap, and five tools: three for generating and finding images, plus alt text and a WCAG contrast check for images headed into a page. It isn't published to npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
 
 ## How it works
 
@@ -209,7 +209,30 @@ No inputs; read-only, and never generates or spends anything. Returns the config
 | `limit` | `20` | 1 to 100 |
 | `provider` | all | Only images made by this provider |
 
-Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, and cost. Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be read or parsed, or their PNG is gone. A broken sidecar or a missing PNG is skipped quietly; any other read error (permissions, for example) is also logged to stderr. The PNG path always comes from the sidecar's file name, never from its contents.
+Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, cost, and alt text (`null` until saved with `save_alt_text`). Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be read or parsed, or their PNG is gone. A broken sidecar or a missing PNG is skipped quietly; any other read error (permissions, for example) is also logged to stderr. The PNG path always comes from the sidecar's file name, never from its contents.
+
+### `save_alt_text`
+
+| Input | Notes |
+| --- | --- |
+| `image` | The PNG's absolute path, as `generate_image` or `list_images` returned it, or just its filename |
+| `alt_text` | Up to 1,000 characters; trimmed |
+
+Claude has already seen the image, so it writes the alt text, and this saves it into the image's sidecar (`alt_text`, plus `alt_text_updated_at`). Saving again replaces the text and returns the old one as `previous_alt_text`. The image must be one Darkroom saved: a `<slug>-<8 hex digits>.png` directly in `DARKROOM_OUTPUT_DIR` with its sidecar next to it. Other paths, symlinks, and relative paths are refused. The sidecar is rewritten atomically (a temp file renamed over it), one update at a time.
+
+### `check_contrast`
+
+| Input | Default | Notes |
+| --- | --- | --- |
+| `image` | required | Same as `save_alt_text` |
+| `text_colors` | required | 1 to 8 hex colors (`#rrggbb` or `#rgb`) |
+| `region` | whole image | Where the text will sit, as fractions of the image from its top-left: `{x, y, width, height}`. The bottom third is `{x: 0, y: 0.667, width: 1, height: 0.333}` |
+
+Read-only. Finds the image's dominant colors (up to 6, with the share of the area each covers) and, for each text color, gives its WCAG 2.2 contrast ratio against each one plus AA verdicts: at least 4.5:1 for body text, 3:1 for large text (18pt and up, or 14pt bold). A text color passes only if it passes against every color covering at least 10% of the checked area, so the verdict reflects the worst sizable background, not the average. Ratios are rounded down for display (WCAG doesn't round, so 4.499 fails and shows as 4.49).
+
+Dominant colors come from sharp alone: the image (or region) is shrunk to 256px, pixels are bucketed by color, the buckets grouped with weighted k-means, and near-identical groups merged so one noisy area isn't split into several colors. It takes 20–90ms on a 1MP image. It measures color areas, not fine texture, so small text over a busy pattern can be hard to read even when this passes.
+
+Eyeballing isn't a substitute. In a Z-Image `final` of a white mug by a window, the wall in the top-right corner looks light grey next to the window, but it averages `#514841`: there, white text passes at 9.06:1, and near-black text fails at 2.08:1.
 
 ## Comparison: local vs. OpenAI vs. Gemini
 
@@ -273,7 +296,7 @@ npx -y @modelcontextprotocol/inspector --cli node dist/index.js -e DARKROOM_PROV
   --method tools/call --tool-name generate_image --tool-arg prompt="a red bicycle" aspect_ratio=16:9
 ```
 
-The first lists `generate_image`, `list_providers`, and `list_images`; the second returns an image block plus the structured result (path, provider `mock`, 688×384). Checked with Inspector 2.9.0.
+The first lists `generate_image`, `list_providers`, `list_images`, `save_alt_text`, and `check_contrast`; the second returns an image block plus the structured result (path, provider `mock`, 688×384). Checked with Inspector 2.9.0.
 
 **Eval.** `npm run eval` runs the ten prompts in `eval/prompts.json` against every provider in `DARKROOM_PROVIDER_ORDER` and writes `eval/report.md`. Each result is cached in `eval/results.json` by prompt, aspect ratio, provider, model, and quality, so rerunning only generates what's missing or failed, and `npm run eval -- --report` just rebuilds the report. The report shows every provider with cached results at the chosen quality, whatever `DARKROOM_PROVIDER_ORDER` is now. A run prints what it will generate and an estimate of the cost; if anything costs money, it stops there until you rerun with `-- --yes`. Ctrl+C cancels the request in progress (stopping ComfyUI's job), keeps finished results, leaves the report as it was, and exits 130.
 
