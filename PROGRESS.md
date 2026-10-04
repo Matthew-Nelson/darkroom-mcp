@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M6 (accessibility metadata) built and accepted; awaiting review · PR #16 (flaky test fix) awaiting review
+## Current: M6 (accessibility metadata) built and accepted; review fixes pushed, awaiting re-review · PR #16 (flaky test fix) awaiting review
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -78,7 +78,7 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 Done when (agreed with Matt, Oct 4, 2026; decisions in SPEC.md under "Phase 2 roadmap"):
 
-- [x] `npm run check` passes (438 tests)
+- [x] `npm run check` passes (444 tests, after review fixes)
 - [x] Claude generates an image, writes its alt text, and `list_images` shows it
 - [x] The contrast check gives the right ratios for known color pairs, and a sensible verdict for a real image
 - [ ] Matt approved and merged the M6 PR
@@ -137,6 +137,16 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 4, 2026 (UTC) — review of PR #17
+
+Multi-model review of `2ead1d9` (`reviews/pr17-2ead1d9.md`): 12 raised → 6 survived, all Low. All six fixed, each code fix test-first (every new test failed against `2ead1d9` for the reason given):
+
+- **C6:** `find()` didn't run `checkRoot()`, so a bare filename followed an output folder swapped for a symlink (an absolute path was refused). It now runs the same guard as `save()`.
+- **C5:** `find()` passed raw ENOTDIR/EACCES messages through. ENOTDIR now says "No image at …", and any other resolve failure is a `StorageError`. The review's example (`/etc/hosts/foo.png`) doesn't actually hit ENOTDIR, since `find()` resolves the folder part, so the test runs a path one level through a file.
+- **C1:** a sidecar write that failed partway left its `.tmp` file behind; the write is now inside the try that unlinks it. Tested with a mocked `writeFile` that creates the file, then fails with ENOSPC (`test/unit/storage-faults.test.ts`).
+- **C4:** `list_images` listed any `<anything>-<8 hex>.json`, so it could show paths `find()` refuses. Both now share `SIDECAR_NAME` from `storage.ts`. Every image in `~/.darkroom/images` matches.
+- **C3, C2:** the PR body still stated the old verdict rule and 438 tests; both updated (444 tests now).
 
 ### Oct 4, 2026 (UTC) — M6 benchmark on a real Z-Image (asked for by Matt)
 
