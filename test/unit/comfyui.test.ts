@@ -3,7 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { createComfyUIProvider, type SocketLike } from "../../src/providers/comfyui.js";
-import { loadWorkflow } from "../../src/providers/comfyui-workflow.js";
+import { loadWorkflow, type Workflow } from "../../src/providers/comfyui-workflow.js";
 import type { GenerateRequest, ProgressUpdate } from "../../src/providers/types.js";
 
 // Offline tests against responses recorded from a real ComfyUI (test/fixtures/comfyui).
@@ -11,6 +11,8 @@ import type { GenerateRequest, ProgressUpdate } from "../../src/providers/types.
 const URL_ = "http://127.0.0.1:8188";
 const workflow = await loadWorkflow("zimage");
 const request: GenerateRequest = { prompt: "a ceramic mug that says DARKROOM", aspectRatio: "1:1", quality: "draft" };
+// The same template without its image-to-image companion.
+const textOnly: Workflow = { name: workflow.name, graph: workflow.graph, mapping: workflow.mapping };
 
 const fixture = (name: string): unknown =>
   JSON.parse(readFileSync(new URL(`../fixtures/comfyui/${name}`, import.meta.url), "utf8"));
@@ -35,6 +37,8 @@ interface FakeOptions {
   historyStatus?: number; // HTTP status of /history while polling (before any cancel)
   historyFailsDuringCancel?: boolean; // /history keeps returning historyStatus during the cancel too
   hangView?: boolean; // /view never answers; it rejects once the request is aborted
+  uploadStatus?: number; // HTTP status of POST /upload/image
+  hangUpload?: boolean; // /upload/image never answers; it rejects once the request is aborted
   onView?: () => void; // called when /view is requested, i.e. once ComfyUI has finished the job
   unreachable?: boolean | "bad port";
   missingClasses?: string[];
@@ -44,6 +48,7 @@ interface FakeOptions {
 
 function fakeComfy(o: FakeOptions = {}) {
   const calls: { method: string; path: string; body: unknown }[] = [];
+  const uploads: FormData[] = [];
   let promptId = "";
   let polls = 0;
   let cancelling = false;
@@ -75,6 +80,15 @@ function fakeComfy(o: FakeOptions = {}) {
     }
 
     const path = url.pathname;
+    if (method === "POST" && path === "/upload/image") {
+      if (!(init?.body instanceof FormData)) return json({ error: "expected multipart" }, 400);
+      uploads.push(init.body);
+      if (o.hangUpload) return hang(init.signal);
+      if (o.uploadStatus) return json({ error: "boom" }, o.uploadStatus);
+      const image = init.body.get("image");
+      const name = image instanceof File ? image.name : "?";
+      return json({ name, subfolder: init.body.get("subfolder"), type: "input" });
+    }
     if (method === "POST" && path === "/queue") {
       cancelling = true;
       deletes++;
@@ -144,14 +158,17 @@ function fakeComfy(o: FakeOptions = {}) {
 
   return {
     calls,
+    uploads,
     sockets,
     posted: (path: string) => calls.filter((c) => c.method === "POST" && c.path === path).map((c) => c.body),
-    provider: (over: { timeoutMs?: number; cancelTimeoutMs?: number; openSocket?: (url: string) => SocketLike } = {}) =>
+    provider: (
+      over: { timeoutMs?: number; cancelTimeoutMs?: number; openSocket?: (url: string) => SocketLike; workflow?: Workflow } = {},
+    ) =>
       createComfyUIProvider({
         url: URL_,
         timeoutMs: over.timeoutMs ?? 10_000,
         cancelTimeoutMs: over.cancelTimeoutMs ?? 5_000,
-        workflow,
+        workflow: over.workflow ?? workflow,
         fetch: fetchFn,
         pollIntervalMs: 1,
         openSocket:
@@ -217,11 +234,15 @@ describe("comfyui provider: generate", () => {
     expect(result.seed).toBeGreaterThanOrEqual(0);
   });
 
-  it("is free and doesn't support negative prompts with the Z-Image template", () => {
+  it("is free, doesn't support negative prompts, and takes a reference image with the Z-Image template", () => {
     const p = fakeComfy().provider();
     expect(p.isPaid).toBe(false);
     expect(p.estimateCostUsd(request)).toBe(0);
-    expect(p.supports).toEqual({ negativePrompt: false, seed: true, referenceImage: false });
+    expect(p.supports).toEqual({ negativePrompt: false, seed: true, referenceImage: true });
+  });
+
+  it("can't take a reference image with a template that has no image-to-image companion", () => {
+    expect(fakeComfy().provider({ workflow: textOnly }).supports.referenceImage).toBe(false);
   });
 
   it("explains a rejected workflow using ComfyUI's node errors", async () => {
@@ -276,6 +297,90 @@ describe("comfyui provider: generate", () => {
     await expect(comfy.provider().generate(request, signal())).rejects.toThrow(
       /^ComfyUI returned HTTP 500 for GET \/history\/[0-9a-f-]{36}\. The job is no longer running or queued in ComfyUI\.$/,
     );
+  });
+});
+
+describe("comfyui provider: reference image", () => {
+  type Submitted = { prompt: Record<string, { inputs: Record<string, unknown> }> };
+  const reference = async (channels: 3 | 4 = 3) => {
+    const background = channels === 4 ? { r: 0, g: 0, b: 0, alpha: 0 } : "#336699";
+    const png = await sharp({ create: { width: 300, height: 200, channels, background } }).png().toBuffer();
+    return { png, width: 300, height: 200 };
+  };
+
+  it("uploads the reference by content to input/darkroom, then runs the image-to-image template on it", async () => {
+    const comfy = fakeComfy();
+    const progress: string[] = [];
+    const req = { ...request, aspectRatio: "3:2", seed: 7, referenceImage: await reference() } as const;
+    const result = await comfy.provider().generate(req, signal(), (u) => progress.push(u.message));
+
+    const [form] = comfy.uploads;
+    const image = form?.get("image");
+    if (!(image instanceof File)) throw new Error("expected the reference as a file");
+    expect(image.name).toMatch(/^darkroom-[0-9a-f]{16}\.png$/);
+    expect([form?.get("type"), form?.get("subfolder"), form?.get("overwrite")]).toEqual(["input", "darkroom", "true"]);
+
+    const [submitted] = comfy.posted("/prompt") as Submitted[];
+    const g = submitted?.prompt ?? {};
+    expect(g.reference?.inputs.image).toBe(`darkroom/${image.name}`);
+    expect([g.scale?.inputs.width, g.scale?.inputs.height]).toEqual([624, 416]);
+    expect(g.sample?.inputs.latent_image).toEqual(["encode", 0]);
+    expect(g.sample?.inputs.denoise).toBe(workflow.img2img?.graph.sample?.inputs.denoise);
+    expect([g.pos?.inputs.text, g.sample?.inputs.seed]).toEqual([request.prompt, 7]);
+    expect(g.latent).toBeUndefined();
+    expect(result).toMatchObject({ model: "z-image-turbo-q4_k_m", seed: 7, actualCostUsd: 0 });
+    expect(progress[0]).toBe("Uploading the reference image to ComfyUI");
+  });
+
+  it("names the same reference the same way, so it's stored once", async () => {
+    const comfy = fakeComfy();
+    const req = { ...request, referenceImage: await reference() };
+    await comfy.provider().generate(req, signal());
+    await comfy.provider().generate(req, signal());
+    const names = comfy.uploads.map((f) => (f.get("image") as File).name);
+    expect(names[0]).toBe(names[1]);
+  });
+
+  it("flattens a transparent reference before uploading it", async () => {
+    const comfy = fakeComfy();
+    await comfy.provider().generate({ ...request, referenceImage: await reference(4) }, signal());
+    const image = comfy.uploads[0]?.get("image") as File;
+    const meta = await sharp(Buffer.from(await image.arrayBuffer())).metadata();
+    expect(meta.hasAlpha).toBe(false);
+  });
+
+  it("fails clearly when the upload is refused, without queueing anything", async () => {
+    const comfy = fakeComfy({ uploadStatus: 500 });
+    await expect(comfy.provider().generate({ ...request, referenceImage: await reference() }, signal())).rejects.toThrow(
+      /^ComfyUI returned HTTP 500 when uploading the reference image\.$/,
+    );
+    expect(comfy.posted("/prompt")).toEqual([]);
+    expect(comfy.posted("/queue")).toEqual([]);
+  });
+
+  it("says nothing was sent when cancelled during the upload, and doesn't try to cancel a job", async () => {
+    const comfy = fakeComfy({ hangUpload: true });
+    await expect(comfy.provider().generate({ ...request, referenceImage: await reference() }, abortSoon())).rejects.toThrow(
+      "Generation was cancelled before the job was sent to ComfyUI.",
+    );
+    expect(comfy.posted("/prompt")).toEqual([]);
+    expect(comfy.posted("/queue")).toEqual([]);
+  });
+
+  it("names the setting when the upload times out", async () => {
+    const comfy = fakeComfy({ hangUpload: true });
+    const generating = comfy.provider({ timeoutMs: 30 }).generate({ ...request, referenceImage: await reference() }, signal());
+    await expect(generating).rejects.toThrow(
+      "Uploading the reference image to ComfyUI didn't finish within 0s (COMFYUI_TIMEOUT_MS).",
+    );
+  });
+
+  it("refuses a reference with a template that has no image-to-image companion (a backstop for the router)", async () => {
+    const comfy = fakeComfy();
+    await expect(
+      comfy.provider({ workflow: textOnly }).generate({ ...request, referenceImage: await reference() }, signal()),
+    ).rejects.toThrow('The "zimage" workflow has no image-to-image template for a reference image.');
+    expect(comfy.uploads).toEqual([]);
   });
 });
 

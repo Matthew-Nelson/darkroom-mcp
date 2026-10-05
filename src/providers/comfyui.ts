@@ -1,14 +1,20 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import sharp from "sharp";
 import { log } from "../log.js";
-import { buildGraph, nodeClasses, type Workflow } from "./comfyui-workflow.js";
+import { buildGraph, nodeClasses, templates, type Workflow, type WorkflowGraph } from "./comfyui-workflow.js";
 import { sizeForQuality } from "./sizes.js";
-import type { GenerateRequest, GenerateResult, ImageProvider, ProgressListener } from "./types.js";
+import type { GenerateRequest, GenerateResult, ImageProvider, ProgressListener, ReferenceImage } from "./types.js";
 
 // Talks to a local ComfyUI over HTTP: POST /prompt, poll /history/{id}, fetch the
 // image from /view. Step-by-step progress comes from ComfyUI's websocket when it's
-// available; generation works without it.
+// available; generation works without it. A reference image is uploaded first
+// (POST /upload/image) and run through the workflow's image-to-image companion.
+
+// Where uploaded references go, inside ComfyUI's input folder. They're named by content,
+// so the same reference is stored once however often it's used. ComfyUI has no API to
+// delete inputs, so they stay until removed by hand.
+const UPLOAD_SUBFOLDER = "darkroom";
 
 const HEALTH_TIMEOUT_MS = 5_000;
 const CANCEL_TIMEOUT_MS = 5_000;
@@ -96,9 +102,34 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
     }
   }
 
-  async function fetchImage(entry: HistoryEntry, signal: AbortSignal): Promise<Buffer> {
-    const image = entry.outputs?.[mapping.output.node]?.images?.[0];
-    if (!image) throw new ComfyUIError(`ComfyUI finished, but output node "${mapping.output.node}" produced no image.`);
+  /** Uploads a reference to ComfyUI's input folder and returns the name LoadImage takes. */
+  async function upload(reference: ReferenceImage, signal: AbortSignal): Promise<string> {
+    // Flattened, since the image-to-image graph encodes RGB and would treat transparent pixels as black.
+    const png = await sharp(reference.png).flatten({ background: "#ffffff" }).png().toBuffer();
+    const name = `darkroom-${createHash("sha256").update(png).digest("hex").slice(0, 16)}.png`;
+    const form = new FormData();
+    form.append("image", new Blob([new Uint8Array(png)], { type: "image/png" }), name);
+    form.append("type", "input");
+    form.append("subfolder", UPLOAD_SUBFOLDER);
+    form.append("overwrite", "true");
+    let res: Response;
+    try {
+      res = await fetchFn(`${url}/upload/image`, { method: "POST", signal, body: form });
+    } catch (err) {
+      if (signal.aborted) throw err;
+      throw new ComfyUIError(`Can't reach ComfyUI at ${url} to upload the reference image (${networkReason(err)}).`);
+    }
+    if (!res.ok) throw new ComfyUIError(`ComfyUI returned HTTP ${res.status} when uploading the reference image.`);
+    const body = (await res.json().catch(() => ({}))) as { name?: unknown; subfolder?: unknown };
+    if (typeof body.name !== "string") {
+      throw new ComfyUIError("ComfyUI's answer to the reference image upload had no filename.");
+    }
+    return typeof body.subfolder === "string" && body.subfolder !== "" ? `${body.subfolder}/${body.name}` : body.name;
+  }
+
+  async function fetchImage(entry: HistoryEntry, outputNode: string, signal: AbortSignal): Promise<Buffer> {
+    const image = entry.outputs?.[outputNode]?.images?.[0];
+    if (!image) throw new ComfyUIError(`ComfyUI finished, but output node "${outputNode}" produced no image.`);
     const query = new URLSearchParams({ filename: image.filename, subfolder: image.subfolder ?? "", type: image.type ?? "output" });
     const res = await request(`/view?${query.toString()}`, signal);
     if (!res.ok) throw new ComfyUIError(`ComfyUI returned HTTP ${res.status} when fetching the finished image.`);
@@ -153,7 +184,12 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
     return ((await getJson(`/history/${promptId}`, signal)) as Record<string, HistoryEntry>)[promptId];
   }
 
-  function watchProgress(clientId: string, isOurs: (id: unknown) => boolean, onProgress: ProgressListener) {
+  function watchProgress(
+    clientId: string,
+    graph: WorkflowGraph,
+    isOurs: (id: unknown) => boolean,
+    onProgress: ProgressListener,
+  ) {
     let socket: SocketLike;
     try {
       socket = openSocket(`${url.replace(/^http/, "ws")}/ws?clientId=${clientId}`);
@@ -177,7 +213,7 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
       if (msg.type === "execution_start") {
         onProgress({ message: "Started in ComfyUI" });
       } else if (msg.type === "executing" && typeof data.node === "string") {
-        const node = workflow.graph[data.node];
+        const node = graph[data.node];
         const title = (node?._meta as { title?: string } | undefined)?.title ?? node?.class_type ?? data.node;
         onProgress({ message: `Running ${title}` });
       } else if (msg.type === "progress" && typeof data.value === "number" && typeof data.max === "number") {
@@ -191,7 +227,12 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
     name: "comfyui",
     model: mapping.model,
     isPaid: false,
-    supports: { negativePrompt: mapping.inputs.negativePrompt !== undefined, seed: true, referenceImage: false },
+    // A reference needs an image-to-image companion template (see comfyui-workflow.ts).
+    supports: {
+      negativePrompt: mapping.inputs.negativePrompt !== undefined,
+      seed: true,
+      referenceImage: workflow.img2img !== undefined,
+    },
     estimateCostUsd: () => 0,
 
     async healthCheck() {
@@ -217,26 +258,39 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
     },
 
     async generate(req: GenerateRequest, signal: AbortSignal, onProgress?: ProgressListener): Promise<GenerateResult> {
+      const template = req.referenceImage ? workflow.img2img : workflow;
+      // The router never sends a reference to a provider without support; this is a backstop.
+      if (!template) {
+        throw new ComfyUIError(`The "${workflow.name}" workflow has no image-to-image template for a reference image.`);
+      }
       const seed = req.seed ?? randomInt(0, 2 ** 32);
-      const { width, height } = sizeForQuality(req.aspectRatio, req.quality, mapping.sizeMultiple);
-      const graph = buildGraph(workflow, { prompt: req.prompt, negativePrompt: req.negativePrompt, seed, width, height });
+      const { width, height } = sizeForQuality(req.aspectRatio, req.quality, template.mapping.sizeMultiple);
+      const values = { prompt: req.prompt, negativePrompt: req.negativePrompt, seed, width, height };
 
       const timeout = AbortSignal.timeout(opts.timeoutMs);
       const run = AbortSignal.any([signal, timeout]);
       const clientId = randomUUID();
       let promptId: string = randomUUID();
+      let sending = false;
       let submitted = false;
       let finished = false;
-      const socket = onProgress && watchProgress(clientId, (id) => id === promptId, onProgress);
+      const socket = onProgress && watchProgress(clientId, template.graph, (id) => id === promptId, onProgress);
 
       try {
+        let referenceImage: string | undefined;
+        if (req.referenceImage) {
+          onProgress?.({ message: "Uploading the reference image to ComfyUI" });
+          referenceImage = await upload(req.referenceImage, run);
+        }
+        const graph = buildGraph(template, { ...values, referenceImage });
+        sending = true;
         promptId = await submit(graph, promptId, clientId, run);
         submitted = true;
         onProgress?.({ message: "Queued in ComfyUI" });
         const entry = await waitForHistory(promptId, run);
         finished = true;
         throwIfFailed(entry);
-        const raw = await fetchImage(entry, run);
+        const raw = await fetchImage(entry, template.mapping.output.node, run);
         const png = await sharp(raw).png().toBuffer({ resolveWithObject: true });
         return {
           png: png.data,
@@ -252,6 +306,16 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
         const cancelled = signal.aborted;
         const timedOut = timeout.aborted && !cancelled;
         const seconds = Math.round(opts.timeoutMs / 1000);
+        if (!sending) {
+          // Still uploading the reference: nothing was queued, so there's nothing to cancel.
+          if (timedOut) {
+            throw new ComfyUIError(
+              `Uploading the reference image to ComfyUI didn't finish within ${seconds}s (COMFYUI_TIMEOUT_MS).`,
+            );
+          }
+          if (cancelled) throw new ComfyUIError("Generation was cancelled before the job was sent to ComfyUI.");
+          throw err;
+        }
         if (finished) {
           if (timedOut) {
             throw new ComfyUIError(
@@ -283,7 +347,8 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
   function missingNodeProblems(missing: string[]): string[] {
     const problems: string[] = [];
     let rest = missing;
-    for (const pack of mapping.customNodes) {
+    const packs = new Map(templates(workflow).flatMap((t) => t.mapping.customNodes.map((p) => [p.name, p] as const)));
+    for (const pack of packs.values()) {
       const fromPack = rest.filter((c) => pack.nodes.includes(c));
       if (fromPack.length === 0) continue;
       rest = rest.filter((c) => !fromPack.includes(c));
@@ -300,14 +365,17 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
   }
 
   function missingModelProblems(info: Map<string, NodeInfo | undefined>): string[] {
-    return mapping.models.flatMap((model) => {
-      const classType = workflow.graph[model.node]?.class_type ?? "";
-      const node = info.get(classType);
-      if (!node) return []; // already reported as a missing node
-      const options = comboOptions(node.input?.required?.[model.input] ?? node.input?.optional?.[model.input]);
-      if (options.includes(model.file)) return [];
-      return [`Model file ${model.file} isn't in ComfyUI's models/${model.folder} folder: download it from ${model.source}.`];
-    });
+    const problems = templates(workflow).flatMap((t) =>
+      t.mapping.models.flatMap((model) => {
+        const classType = t.graph[model.node]?.class_type ?? "";
+        const node = info.get(classType);
+        if (!node) return []; // already reported as a missing node
+        const options = comboOptions(node.input?.required?.[model.input] ?? node.input?.optional?.[model.input]);
+        if (options.includes(model.file)) return [];
+        return [`Model file ${model.file} isn't in ComfyUI's models/${model.folder} folder: download it from ${model.source}.`];
+      }),
+    );
+    return [...new Set(problems)]; // the companion usually needs the same files
   }
 }
 
