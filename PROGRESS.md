@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M7 in progress (reference images, branch `m7/reference-image`) · built offline and on local ComfyUI · next: real contract runs, the paid benchmark, acceptance
+## Current: M7 awaiting review (reference images, branch `m7/reference-image`) · built, benchmarked, and accepted · next: Matt's smoke test and review
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 | M5: Gemini provider | done | `m5` |
 | Fix: ComfyUI cancel path (M1 review Lows) | done | — |
 | M6: Accessibility metadata | done | `m6` |
-| M7: Image-to-image and editing | in progress | `m7` |
+| M7: Image-to-image and editing | awaiting review | `m7` |
 | Later: GitHub release | not scheduled | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
@@ -73,6 +73,15 @@ Done when (agreed with Matt, Oct 3, 2026):
 - [x] Cost benchmark and eval recorded; costs compared with list price and OpenAI; estimates calibrated
 - [x] Matt approved and merged PR #10 (after a multi-model review; all 5 findings fixed)
 - [x] Tagged `m5`
+
+## M7 gates
+
+- [x] `npm run check` passes (508 tests); real contract runs pass with a reference: ComfyUI (`DARKROOM_CONTRACT_COMFYUI=1`, 6 tests), OpenAI and Gemini (the reference case only, 2 tests)
+- [x] Done when: the same reference image and prompt run on every provider that supports it by changing only `provider` (mock, comfyui, openai, gemini)
+- [x] Done when: a provider without support refuses clearly (a ComfyUI template with no image-to-image companion, named explicitly)
+- [x] Paid benchmark within the agreed $0.75: about $0.33 spent
+- [ ] Matt approved
+- [ ] Tagged `m7`
 
 ## M6 gates
 
@@ -139,6 +148,41 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 5, 2026 (UTC) — M7 benchmarked and accepted; awaiting review
+
+**Paid benchmark** (`~/.darkroom/benchmark-m7/`, through the real router and ledger, cap $0.40, each response's usage recorded). Reference: the M2 fox café image (1248×832, made by OpenAI); prompt: the same scene at night, keeping the fox, the headline, the cup, and the croissant. A second reference, the M1 red bicycle final (1024×1024), turned to deep winter.
+
+| Request | Reference | Output | Time | Input tokens (image) | Output tokens | Actual | Estimate then |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| openai draft 3:2 | 1248×832 | 992×672 | 10.3 s | 1,077 (1,014) | 118 | $0.011967 | $0.046905 |
+| openai final 3:2 | 1248×832 | 1248×832 | 12.2 s | 1,077 (1,014) | 292 | $0.017187 | $0.061455 |
+| openai draft 1:1 | 1024×1024 | 816×816 | 10.2 s | 1,066 (1,024) | 171 | $0.013532 | $0.046740 |
+| openai draft 3:2 | 2048×1365 | 992×672 | 13.5 s | 1,520 (1,457) | 118 | $0.015511 | $0.046905 |
+| gemini draft 3:2 | 1248×832 | 624×416 | 8.4 s | 305 (258) | 1,103 (747 image) | $0.046041 | $0.047416 |
+| gemini final 3:2 | 1248×832 | 1264×848 | 10.1 s | 305 (258) | 1,479 (1,120 image) | $0.068430 | $0.069796 |
+| gemini draft 1:1 | 1024×1024 | 512×512 | 11.1 s | 285 (258) | 1,079 (747 image) | $0.045959 | $0.047399 |
+
+Findings:
+
+- OpenAI's reference tokens grow with its size (1,014 at 1248×832, 1,024 at 1024×1024, 1,457 at 2048×1365), far under the 5,000 guessed. The estimate is now 800 + 300 per megapixel, 10–12% above each measurement. Output tokens match plain generations (118 for a 3:2 draft, 171 square), so an edit costs about $0.008 more than a generation at 1MP.
+- Gemini counts a reference as 258 tokens at both sizes (~$0.0001), so its prices don't change. Estimate dropped from 1,500 to 400 tokens.
+- Both followed the edit closely. OpenAI kept the scene almost pixel for pixel, changing only the light; Gemini's 3:2 draft mirrored the layout left to right, and its final didn't.
+
+**Contract, real.** `DARKROOM_CONTRACT_COMFYUI=1`: 6 passed in 4m18s (a plain draft and a reference draft). `DARKROOM_CONTRACT_OPENAI=1 DARKROOM_CONTRACT_GEMINI=1 … -t "reference image"`: both passed (about $0.06, outside the ledger by design).
+
+**Acceptance**, over stdio against this branch's `dist/`, order `comfyui,mock,openai,gemini`, the fox reference and night prompt, no `aspect_ratio` (so all took the reference's 3:2), changing only `provider`:
+
+| Provider | Size | Time | Cost | Result |
+| --- | --- | --- | --- | --- |
+| mock | 624×416 | <1 s | $0 | The reference under the placeholder text |
+| comfyui | 624×416 | 136 s | $0 | Layout kept, rain on the window, but the room still bright and the headline garbled ("DARK ROOM DAILY") at the default strength |
+| openai | 992×672 | 13 s | $0.011967 | Night scene, everything else kept |
+| gemini | 624×416 | 9 s | $0.046092 | Night scene, everything else kept |
+
+Then a refusal: a temporary text-only copy of the template (`COMFYUI_WORKFLOW=zimage-noref`, not committed) with order `comfyui,mock`. `list_providers` gave comfyui `reference_image: false`. Named explicitly, it was refused: "Provider "comfyui" can't use a reference image. Enabled providers that can: mock. Leave out provider to use the configured order, or drop reference_image." Without `provider`, comfyui was skipped ("can't use a reference image") and mock served it.
+
+Spend for M7: $0.276686 in the benchmark ledger plus about $0.06 for the contract run: about $0.33 of the $0.75 agreed.
 
 ### Oct 4, 2026 (UTC) — M7 started: reference images (branch `m7/reference-image`)
 
