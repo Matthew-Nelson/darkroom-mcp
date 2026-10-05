@@ -50,11 +50,11 @@ Claude Code talks to Darkroom over stdio. The router sends each request to the f
 
 ## MCP tools
 
-v1 exposes exactly three tools; anything more waits for Phase 2. M6 added `save_alt_text` and `check_contrast`.
+v1 exposes exactly three tools; anything more waits for Phase 2. M6 added `save_alt_text` and `check_contrast`; M7 added `reference_image` and `reference_strength` to `generate_image`.
 
 | Tool | Inputs | Returns |
 | --- | --- | --- |
-| `generate_image` | `prompt` (required), `negative_prompt`, `aspect_ratio` (enum: `1:1` default, `3:2`, `2:3`, `16:9`, `9:16`), `quality` (enum: `draft` default, `final`), `provider` (optional override), `seed`, `filename` | An MCP image content block (a downscaled JPEG preview, max 768px on the long edge, for Claude to see) plus text and `structuredContent` with the absolute file path, provider, model, actual pixel size, seed (or null), latency in ms, cost in USD (actual when the provider reports it, otherwise the estimate), ignored parameters, and any skipped providers with reasons |
+| `generate_image` | `prompt` (required), `negative_prompt`, `aspect_ratio` (enum: `1:1` default, `3:2`, `2:3`, `16:9`, `9:16`), `quality` (enum: `draft` default, `final`), `provider` (optional override), `seed`, `filename`, `reference_image` (M7: absolute path of a local PNG/JPEG/WebP, or a Darkroom filename), `reference_strength` (M7: 0.1–1, default 0.5) | An MCP image content block (a downscaled JPEG preview, max 768px on the long edge, for Claude to see) plus text and `structuredContent` with the absolute file path, provider, model, actual pixel size, seed (or null), latency in ms, cost in USD (actual when the provider reports it, otherwise the estimate), ignored parameters, and any skipped providers with reasons |
 | `list_providers` | none | Each provider's name, model, enabled/healthy status, whether it costs money, estimated cost per image, and today's spend vs. the cap |
 | `list_images` | `limit` (default 20), `provider` filter | Recent generations from the metadata sidecars: path, prompt, provider, timestamp, cost, alt text (M6) |
 | `save_alt_text` (M6) | `image` (absolute path or filename of a Darkroom PNG), `alt_text` | Writes `alt_text` into the image's sidecar atomically, replacing any earlier text, and returns the text it replaced |
@@ -87,7 +87,7 @@ type AspectRatio = "1:1" | "3:2" | "2:3" | "16:9" | "9:16";
 interface ImageProvider {
   name: string;
   isPaid: boolean;
-  supports: { negativePrompt: boolean; seed: boolean };
+  supports: { negativePrompt: boolean; seed: boolean; referenceImage: boolean; referenceStrength: boolean }; // M7 added the last two
   estimateCostUsd(req: GenerateRequest): number;
   healthCheck(): Promise<{ ok: boolean; detail?: string }>;
   // Maps aspectRatio to the nearest size the provider supports.
@@ -251,6 +251,8 @@ Set by Matt on Oct 4, 2026, after the repo went public. One milestone at a time,
    - Draft done when: Claude generates an image, writes its alt text, and `list_images` shows it; the contrast check gives the right ratios for known color pairs and a sensible verdict for a real image. Mock-only tests, no spend.
    - Settled at the start (Matt, Oct 4, 2026): the contrast check is its own read-only tool, `check_contrast`. Both tools take the image's absolute path or just its filename, and only accept images Darkroom saved in `DARKROOM_OUTPUT_DIR`. A text color passes only if it passes against every dominant color covering at least 10% of the checked area, with an optional `region` for where the text will sit. Revised after the benchmark (Matt, Oct 4, 2026): a text color fails when the colors it fails against cover 10% or more *together*, since clustering can split one failing area into pieces under 10% each.
 - **M7: Image-to-image and editing.** An optional `reference_image` input on `generate_image` (a local file), with `supports.referenceImage` on each provider. OpenAI and Gemini both take an input image; ComfyUI needs an image-to-image template; mock echoes the input. Unlike `seed` or `negative_prompt`, which a provider without support ignores with a note in the result, a reference can't be quietly dropped (the image would ignore it), so a provider that can't use one is skipped or refuses; which one is settled at the start.
+   - Settled at the start (Matt, Oct 4, 2026): a reference can be any local PNG, JPEG, or WebP by absolute path, or a Darkroom image by filename; it's decoded, turned upright, stripped of metadata, and capped at 2048px before any provider sees it. A provider that can't use one is skipped in the provider order (a skipped free provider still closes the paid gate) and refused when named explicitly. Without an `aspect_ratio`, the output takes the reference's closest shape. Paid spend budget for the milestone: $0.75.
+   - Added during the milestone (Matt, Oct 4, 2026): `reference_strength` (0.1–1, default 0.5), ComfyUI's denoise. A fixed value couldn't serve both photos (which rearrange from about 0.65) and flat logos (which barely change below about 0.7). Paid providers edit from instructions, so they ignore it and report it in `ignored_params`.
    - Draft done when: the same reference image and prompt run on every provider that supports it by changing only `provider`, and a provider without support refuses clearly. A small paid benchmark (cost agreed first) calibrates the estimates.
 
 **Later, not scheduled:** a GitHub release for `v0.1.0` (or the version current by then), with notes.

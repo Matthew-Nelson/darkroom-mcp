@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M6 done (accessibility metadata, tagged `m6`) · PR #16 (flaky test fix) awaiting review · next: M7, with a plan first
+## Current: M7 in progress (reference images, branch `m7/reference-image`) · built offline and on local ComfyUI · next: real contract runs, the paid benchmark, acceptance
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 | M5: Gemini provider | done | `m5` |
 | Fix: ComfyUI cancel path (M1 review Lows) | done | — |
 | M6: Accessibility metadata | done | `m6` |
-| M7: Image-to-image and editing | not started | `m7` |
+| M7: Image-to-image and editing | in progress | `m7` |
 | Later: GitHub release | not scheduled | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
@@ -93,6 +93,9 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 
 ## Deviations from spec
 
+- **`reference_strength` added to `generate_image`** (Matt, Oct 4, 2026, during M7). SPEC planned only `reference_image`. Local image-to-image needs a dial: at a fixed denoise of 0.5 a flat logo came back nearly unchanged (it needed about 0.7), while a photo already rearranges at 0.65. It's 0.1–1, default 0.5, mapped to ComfyUI's denoise through the template mapping; paid providers ignore it with a note in `ignored_params`.
+- **A reference's aspect ratio becomes the default** (Matt, Oct 4, 2026, M7). With a `reference_image` and no `aspect_ratio`, the output takes the reference's closest supported shape instead of 1:1. The sidecar's `request.aspect_ratio` records the ratio actually used.
+
 - **Additions to `save_alt_text`** (M6). It also records `alt_text_updated_at` and returns `previous_alt_text`, so replacing alt text can be undone; that's also why it's annotated `destructiveHint: true`. Alt text is capped at 1,000 characters.
 - **The contrast verdict counts failing colors together** (Matt, Oct 4, 2026, after the M6 benchmark). Agreed at the start: pass only against every color covering at least 10%. The benchmark showed clustering can split one failing area (pines, 13% of a band) into colors under 10% each, which then didn't count. Now a text color fails when the colors it fails against cover 10% or more together; `worst_ratio` is the ratio where the lowest-contrast colors reach 10%.
 - **How dominant colors are found** (M6). SPEC said only "from sharp". The image (or region) is shrunk to 256px, bucketed at 5 bits per channel, grouped with weighted k-means (at most 6, seeded deterministically), and groups within 40 RGB units merged.
@@ -136,6 +139,26 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 4, 2026 (UTC) — M7 started: reference images (branch `m7/reference-image`)
+
+Matt picked, at the start: any local image as a reference (not only Darkroom's), skip in the provider order and refuse when named, the reference's shape as the default aspect ratio, and a paid budget of $0.75.
+
+Built so far, each commit passing `npm run check`: reference loading (decode, turn upright, strip metadata, cap at 2048px; refused before any network call if it isn't a PNG, JPEG, or WebP); `supports.referenceImage` and the router's skip/refuse rule, with `list_providers` showing it; `reference_image` on `generate_image`, with mock drawing the reference; Gemini (inline part) and OpenAI (`/v1/images/edits`, multipart via the built-in FormData); ComfyUI (upload to `input/darkroom/`, a `zimage-img2img` companion template); and `reference_strength`. 505 tests.
+
+Docs checked: OpenAI's image guide (edits take `image`/`image[]` as multipart, PNG/JPEG/WebP under 50MB; gpt-image-2 always reads inputs at high fidelity), Gemini's image generation and understanding pages (inline images in `parts`, 20MB request limit, PNG/JPEG/WebP/HEIC/HEIF), and ComfyUI's `/upload/image` and `LoadImage`, `ImageScale`, `VAEEncode` against the local 0.38.0 server.
+
+**Denoise, measured locally** (Z-Image Turbo, 3:2 draft 624×416, ~100 s each, seed 20261004). Reference: the M2 fox café image (made by OpenAI); prompt: the same scene at night with rain on the window.
+
+| Denoise | Result |
+| --- | --- |
+| 0.5 | Layout kept (cup, fox, window, headline); rain and dusk outside, the room still fairly bright |
+| 0.65 | A real night scene, but rearranged: the fox lower, the croissant gone |
+| 0.8 | A new picture; little of the reference's composition left |
+
+0.5 went into the template. Matt then ran five logo restyles (a flat "California Burrito" logo, from another session): at 0.5 the synthwave try came back nearly identical to the logo; at 0.7 synthwave, citrus-crate label, embroidered patch, stained glass, and tattoo flash all came through in the logo, with the lettering spelled right in all five, but none of the asked-for backgrounds (navy fabric, orange groves, parchment) appeared over the logo's white field. That led to `reference_strength` (see Deviations). $0 so far.
+
+Along the way: local `main` was behind `origin/main` (PR #16's merge hadn't been pulled), which showed up as the two cancel-test flakes PR #16 had fixed. Pulled and rebased the unpushed branch.
 
 ### Oct 4, 2026 (UTC) — M6 done (tagged `m6`)
 
