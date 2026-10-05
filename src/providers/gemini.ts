@@ -50,6 +50,11 @@ const ESTIMATED_EXTRA_OUTPUT_TOKENS = 600;
 // generationConfig.seed is a 32-bit signed integer.
 const MAX_SEED = 2 ** 31 - 1;
 
+// Input tokens for a reference image. Gemini 3 bills an image by its media resolution,
+// not its pixel count; the default for images is about 1,120 tokens. Billed at the input
+// rate, so even this rounded-up count adds under $0.001. To be calibrated in M7's benchmark.
+const ESTIMATED_REFERENCE_TOKENS = 1_500;
+
 // Prompt text tokens: errs high, as for OpenAI.
 const estimatePromptTokens = (prompt: string) => Math.ceil(prompt.length / 3) + 20;
 
@@ -91,7 +96,7 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
   function estimateCostUsd(req: GenerateRequest): number {
     const imageTokens = IMAGE_TOKENS[geminiImageSize(model, req.quality)];
     return roundUsd(
-      (estimatePromptTokens(req.prompt) * rates.input +
+      ((estimatePromptTokens(req.prompt) + (req.referenceImage ? ESTIMATED_REFERENCE_TOKENS : 0)) * rates.input +
         imageTokens * rates.imageOutput +
         ESTIMATED_EXTRA_OUTPUT_TOKENS * rates.textOutput) /
         1e6,
@@ -104,7 +109,8 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
     isPaid: true,
     // Not exact: the same seed gives the same composition, slightly reframed, and it
     // carries from a 512px draft to a 1K final (M5 benchmark).
-    supports: { negativePrompt: false, seed: true, referenceImage: false },
+    // A reference image goes in as an inline part beside the prompt; Gemini edits from instructions.
+    supports: { negativePrompt: false, seed: true, referenceImage: true },
     estimateCostUsd,
 
     // Free and offline, per the spec: a paid provider is healthy when it has its key.
@@ -134,7 +140,12 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
       const seed = req.seed ?? randomInt(0, MAX_SEED + 1);
       const imageSize = geminiImageSize(model, req.quality);
       const sizeLabel = imageSize === "512" ? "512px" : imageSize;
-      onProgress?.({ message: `Waiting for Gemini (${model}, ${sizeLabel}, ${req.aspectRatio})` });
+      const withRef = req.referenceImage ? ", with a reference image" : "";
+      onProgress?.({ message: `Waiting for Gemini (${model}, ${sizeLabel}, ${req.aspectRatio}${withRef})` });
+      const input: Part[] = [{ text: req.prompt }];
+      if (req.referenceImage) {
+        input.push({ inlineData: { mimeType: "image/png", data: req.referenceImage.png.toString("base64") } });
+      }
 
       const timeout = AbortSignal.timeout(timeoutMs);
       // The body is read under the same signal, so a cancel or timeout mid-download
@@ -148,7 +159,7 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
           // In a header, never a ?key= query parameter, so it can't leak through a URL in an error.
           headers: { "x-goog-api-key": apiKey, "content-type": "application/json" },
           body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: req.prompt }] }],
+            contents: [{ role: "user", parts: input }],
             generationConfig: {
               responseModalities: ["IMAGE"],
               seed,

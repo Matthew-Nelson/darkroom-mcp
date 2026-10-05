@@ -61,7 +61,7 @@ describe("gemini provider", () => {
     expect(p.name).toBe("gemini");
     expect(p.model).toBe("gemini-3.1-flash-image");
     expect(p.isPaid).toBe(true);
-    expect(p.supports).toEqual({ negativePrompt: false, seed: true, referenceImage: false });
+    expect(p.supports).toEqual({ negativePrompt: false, seed: true, referenceImage: true });
     const draft = p.estimateCostUsd(request);
     const final = p.estimateCostUsd({ ...request, quality: "final" });
     expect(final).toBeGreaterThan(draft);
@@ -135,6 +135,26 @@ describe("gemini provider", () => {
         imageConfig: { aspectRatio: "3:2", imageSize: "512" },
       },
     });
+  });
+
+  it("sends a reference image as an inline PNG part after the prompt", async () => {
+    const { fetch, calls } = fakeFetch(reply("generate-200-draft.json"));
+    const png = await sharp({ create: { width: 96, height: 64, channels: 3, background: "#123456" } }).png().toBuffer();
+    await provider(fetch).generate({ ...request, referenceImage: { png, width: 96, height: 64 } }, signal);
+    expect(calls[0]?.body.contents).toEqual([
+      {
+        role: "user",
+        parts: [{ text: request.prompt }, { inlineData: { mimeType: "image/png", data: png.toString("base64") } }],
+      },
+    ]);
+  });
+
+  it("adds the reference's input tokens to the estimate", () => {
+    const p = provider(fakeFetch(reply("generate-200-draft.json")).fetch);
+    const referenceImage = { png: Buffer.from("png"), width: 2048, height: 1536 };
+    const extra = p.estimateCostUsd({ ...request, referenceImage }) - p.estimateCostUsd(request);
+    expect(extra).toBeGreaterThan(0);
+    expect(extra).toBeLessThan(0.005); // input is $0.50 per million tokens
   });
 
   it("picks a random 32-bit seed when none is given, sends it, and returns it", async () => {
