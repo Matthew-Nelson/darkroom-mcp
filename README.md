@@ -224,6 +224,8 @@ For the local model, describe the whole picture you want, not only the change, a
 
 Large plain areas, like a logo's white background, survive at any strength that keeps the subject, so "put this logo on navy fabric" is a job for a paid provider. Measured Oct 4, 2026: a fox café photo at 0.5, 0.65, and 0.8, and five restyles of a flat burrito logo at 0.5 and 0.7, all 3:2 drafts at about 100 seconds each.
 
+**A limitation of the local model:** it isn't an editing model. Z-Image draws from text, and image-to-image hands it a noised copy of the reference to redraw (the SDEdit approach), so it never reads the instruction against the picture. `reference_strength` is the only control, and it trades keeping the layout against changing the picture: low values keep the layout but barely move the style, and a value high enough for a big restyle moves the subject and the scene too. On Oct 5, 2026, a beach photo of two people restyled as classic hand-drawn animation at 0.7 came out in the asked-for style, but with the people larger and shifted left, the rocks rearranged, and the footprints rerouted; OpenAI, given the same prompt, kept the photo's layout. The M7 benchmark showed the same gap (a café kept bright when asked for night). For edits that must follow an instruction, or keep a photo's layout through a big style change, use a paid provider.
+
 What a reference costs, measured Oct 4, 2026 (M7 benchmark, a 1248×832 reference unless noted):
 
 | Provider | `draft` | `final` | Time | Notes |
