@@ -76,7 +76,7 @@ Done when (agreed with Matt, Oct 3, 2026):
 
 ## M7 gates
 
-- [x] `npm run check` passes (508 tests); real contract runs pass with a reference: ComfyUI (`DARKROOM_CONTRACT_COMFYUI=1`, 6 tests), OpenAI and Gemini (the reference case only, 2 tests)
+- [x] `npm run check` passes (516 tests, after the review fixes); real contract runs pass with a reference: ComfyUI (`DARKROOM_CONTRACT_COMFYUI=1`, 6 tests), OpenAI and Gemini (the reference case only, 2 tests)
 - [x] Done when: the same reference image and prompt run on every provider that supports it by changing only `provider` (mock, comfyui, openai, gemini)
 - [x] Done when: a provider without support refuses clearly (a ComfyUI template with no image-to-image companion, named explicitly)
 - [x] Paid benchmark within the agreed $0.75: about $0.33 spent
@@ -148,6 +148,19 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 5, 2026 (UTC) — review of PR #18
+
+Multi-model review of `095a3c1` (`reviews/pr18-095a3c1.md`; opus, sonnet, and gemini-3.1-pro-high legs): 17 raised → 11 verified → 6 survived, all Low. All six fixed on the branch, each code fix test-first (every new test failed against `095a3c1` first):
+
+- **A3:** refusing a named provider that can't take a reference said to leave out provider, which dead-ends with order `comfyui,openai` and paid fallback off (comfyui is skipped, then the paid gate stops openai). The hint now says to name a capable provider, and offers the configured order only when a capable one is reachable.
+- **A2:** `COMFYUI_WORKFLOW=zimage-img2img` loaded, then sent the placeholder `example.png` with every text-only request. A template whose mapping has a `referenceImage` input is now refused as the main one.
+- **A1:** the provider reports one model and one `supports.negativePrompt` for both templates; loading now requires the companion to match on both.
+- **A5:** a 6000×150 image passed the 64px minimum, then came out of the 2048px scale-down at 2048×51. The scaled size is checked too.
+- **A6:** with a reference, a moderation refusal blamed only the prompt. It now says the prompt or the reference image may have been refused.
+- **A7:** SPEC's comfyui, openai, and mock rows and the `generate_image` and `list_providers` returns now describe M7.
+
+`npm run check`: 516 tests. No spend.
 
 ### Oct 5, 2026 (UTC) — M7 benchmarked and accepted; awaiting review
 
