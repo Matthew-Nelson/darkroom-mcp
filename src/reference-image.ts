@@ -73,6 +73,13 @@ export async function loadReferenceImage(ref: string, storage: Storage): Promise
     const reason = err instanceof Error ? err.message : String(err);
     throw new ReferenceImageError(`${path} couldn't be decoded (${reason}).`);
   }
+  // Checked again after the downscale: a very long, thin image can pass above and end up too thin.
+  if (Math.min(out.info.width, out.info.height) < MIN_REFERENCE_EDGE) {
+    throw new ReferenceImageError(
+      `${path} is ${originalWidth}×${originalHeight}; scaled to ${MAX_REFERENCE_EDGE}px on the long edge it's ` +
+        `${out.info.width}×${out.info.height}, and a reference image needs at least ${MIN_REFERENCE_EDGE}px on each side.`,
+    );
+  }
   return {
     image: { png: out.data, width: out.info.width, height: out.info.height },
     path,

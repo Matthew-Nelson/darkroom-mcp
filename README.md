@@ -204,7 +204,7 @@ Each image is saved as `<slug>-<id>.png` next to `<slug>-<id>.json`, which holds
 
 ### Reference images
 
-Pass `reference_image` to restyle a photo or logo, vary an earlier result, or turn a sketch into a finished picture. Darkroom reads the file once, before any provider sees it: anything that isn't a readable PNG, JPEG, or WebP (or is over 50MB, or under 64px on a side) is refused before any network call; photos are turned upright by their EXIF orientation; metadata, including any GPS position, is dropped by re-encoding to PNG; and anything over 2048px on the long edge is scaled down.
+Pass `reference_image` to restyle a photo or logo, vary an earlier result, or turn a sketch into a finished picture. Darkroom reads the file once, before any provider sees it: anything that isn't a readable PNG, JPEG, or WebP (or is over 50MB, or under 64px on a side, including after the scale-down below) is refused before any network call; photos are turned upright by their EXIF orientation; metadata, including any GPS position, is dropped by re-encoding to PNG; and anything over 2048px on the long edge is scaled down.
 
 The providers use it differently:
 

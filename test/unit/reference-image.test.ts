@@ -141,6 +141,13 @@ describe("loadReferenceImage", () => {
     await expect(loadReferenceImage(path, storage)).rejects.toThrow(/32×200.*at least 64px/);
   });
 
+  it("refuses an image so long and thin that scaling it to 2048px leaves a side under 64px", async () => {
+    const path = await file("banner.png", await solid(6000, 150).png().toBuffer());
+    await expect(loadReferenceImage(path, storage)).rejects.toThrow(
+      /6000×150.*scaled to 2048px on the long edge it's 2048×51.*at least 64px/,
+    );
+  });
+
   it("refuses a file over the size cap before reading it", async () => {
     const path = join(dir, "huge.png");
     await writeFile(path, "");
