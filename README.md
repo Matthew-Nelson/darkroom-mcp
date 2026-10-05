@@ -224,6 +224,14 @@ For the local model, describe the whole picture you want, not only the change, a
 
 Large plain areas, like a logo's white background, survive at any strength that keeps the subject, so "put this logo on navy fabric" is a job for a paid provider. Measured Oct 4, 2026: a fox café photo at 0.5, 0.65, and 0.8, and five restyles of a flat burrito logo at 0.5 and 0.7, all 3:2 drafts at about 100 seconds each.
 
+What a reference costs, measured Oct 4, 2026 (M7 benchmark, a 1248×832 reference unless noted):
+
+| Provider | `draft` | `final` | Time | Notes |
+| --- | --- | --- | --- | --- |
+| `comfyui` | $0 | $0 | ~100 s (3:2 draft) | About as long as a normal render |
+| `openai` | $0.012 (3:2), $0.0135 (1:1) | $0.017 (3:2) | 10–14 s | The reference adds about 1,000 input tokens (~$0.008) at 1MP, 1,457 at 2048×1365 (~$0.012). It kept the scene almost exactly and changed only what was asked |
+| `gemini` | $0.046 | $0.068 | 8–11 s | The reference adds 258 input tokens (~$0.0001), so the price is the same as without one. One of its drafts mirrored the layout left to right |
+
 ComfyUI keeps a copy of each reference in its `input/darkroom/` folder, named by content so a reused reference is stored once. ComfyUI has no API for deleting inputs, so clear that folder by hand if you need to.
 
 A provider that can't use a reference is never sent one: in the provider order it's skipped (and, being skipped, a free one still keeps the paid gate closed), and asking for it by name is refused with the providers that can. Every built-in provider supports references; a ComfyUI template without an `img2img` companion doesn't.

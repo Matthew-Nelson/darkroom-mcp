@@ -50,10 +50,10 @@ const ESTIMATED_EXTRA_OUTPUT_TOKENS = 600;
 // generationConfig.seed is a 32-bit signed integer.
 const MAX_SEED = 2 ** 31 - 1;
 
-// Input tokens for a reference image. Gemini 3 bills an image by its media resolution,
-// not its pixel count; the default for images is about 1,120 tokens. Billed at the input
-// rate, so even this rounded-up count adds under $0.001. To be calibrated in M7's benchmark.
-const ESTIMATED_REFERENCE_TOKENS = 1_500;
+// Input tokens for a reference image, billed at the input rate. In the M7 benchmark
+// (Oct 4, 2026) a reference counted as 258 tokens whatever its size (1248×832 and
+// 1024×1024): about $0.0001. Rounded up.
+const ESTIMATED_REFERENCE_TOKENS = 400;
 
 // Prompt text tokens: errs high, as for OpenAI.
 const estimatePromptTokens = (prompt: string) => Math.ceil(prompt.length / 3) + 20;

@@ -153,8 +153,17 @@ describe("gemini provider", () => {
     const p = provider(fakeFetch(reply("generate-200-draft.json")).fetch);
     const referenceImage = { png: Buffer.from("png"), width: 2048, height: 1536 };
     const extra = p.estimateCostUsd({ ...request, referenceImage }) - p.estimateCostUsd(request);
-    expect(extra).toBeGreaterThan(0);
-    expect(extra).toBeLessThan(0.005); // input is $0.50 per million tokens
+    expect(extra).toBeGreaterThan((258 * 0.5) / 1e6); // measured: 258 input tokens per reference
+    expect(extra).toBeLessThan(0.001);
+  });
+
+  it("estimates at least the recorded real cost of a request with a reference", async () => {
+    const p = provider(fakeFetch(reply("generate-200-reference.json")).fetch);
+    const referenceImage = { png: Buffer.from("png"), width: 1248, height: 832 };
+    const req = { prompt: "x".repeat(196), aspectRatio: "3:2", quality: "draft", referenceImage } as const;
+    const actual = (await p.generate(req, signal)).actualCostUsd ?? 0;
+    expect(actual).toBe(0.046041);
+    expect(p.estimateCostUsd(req)).toBeGreaterThanOrEqual(actual);
   });
 
   it("picks a random 32-bit seed when none is given, sends it, and returns it", async () => {

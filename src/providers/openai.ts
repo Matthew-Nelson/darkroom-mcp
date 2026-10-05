@@ -11,6 +11,7 @@ import {
   type ImageProvider,
   type ProgressListener,
   type Quality,
+  type ReferenceImage,
 } from "./types.js";
 
 // OpenAI Images API with a gpt-image model: POST /v1/images/generations, or
@@ -42,10 +43,11 @@ export const OPENAI_RATES: Record<string, Rates> = {
 // extra room. The router warns if an actual cost beats its estimate.
 const ESTIMATED_OUTPUT_TOKENS: Record<Quality, number> = { draft: 215, final: 700 };
 
-// Input tokens for a reference image. gpt-image-2 models always read input images at
-// high fidelity (input_fidelity can't be set), billed at the image input rate. A guess
-// that errs high until M7's benchmark calibrates it.
-const ESTIMATED_REFERENCE_TOKENS = 5_000;
+// Input tokens for a reference image, billed at the image input rate. gpt-image-2 models
+// always read input images at high fidelity (input_fidelity can't be set). In the M7
+// benchmark (Oct 4, 2026) the count grew with the reference's size: 1,014 tokens for
+// 1248×832, 1,024 for 1024×1024, 1,457 for 2048×1365. This line sits 10–12% above all three.
+const estimateReferenceTokens = (ref: ReferenceImage) => Math.ceil(800 + (300 * ref.width * ref.height) / 1e6);
 
 // Prompt text tokens: the benchmark prompt ran ~3.4 characters per token; 3 errs high.
 const estimatePromptTokens = (prompt: string) => Math.ceil(prompt.length / 3) + 20;
@@ -89,7 +91,7 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
 
   function estimateCostUsd(req: GenerateRequest): number {
     const promptTokens = estimatePromptTokens(req.prompt);
-    const referenceTokens = req.referenceImage ? ESTIMATED_REFERENCE_TOKENS : 0;
+    const referenceTokens = req.referenceImage ? estimateReferenceTokens(req.referenceImage) : 0;
     return roundUsd(
       (promptTokens * rates.textInput +
         referenceTokens * rates.imageInput +
