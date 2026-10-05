@@ -512,9 +512,31 @@ describe("Router reference images", () => {
     expect(err).toBeInstanceOf(NoProviderError);
     expect((err as Error).message).toBe(
       'Provider "comfyui" can\'t use a reference image. Enabled providers that can: mock. ' +
-        "Leave out provider to use the configured order, or drop reference_image.",
+        "Name one, leave out provider to use the configured order, or drop reference_image.",
     );
     expect(comfyui.generate).not.toHaveBeenCalled();
+  });
+
+  it("doesn't suggest the configured order when the paid gate would stop it", async () => {
+    const openai = paidProvider({ supports: { ...paidProvider().supports, referenceImage: true } });
+    const routing = router("comfyui,openai", { comfyui: fakeProvider("comfyui"), openai });
+    const message = (await routing.generate(withRef, { provider: "comfyui", signal }).catch((e: unknown) => e)) as Error;
+    expect(message.message).toBe(
+      'Provider "comfyui" can\'t use a reference image. Enabled providers that can: openai. ' +
+        "Name one to use it, or drop reference_image. Leaving out provider won't reach a paid provider after " +
+        "a free one unless DARKROOM_ALLOW_PAID_FALLBACK=true.",
+    );
+    // The advice holds: leaving out provider is refused.
+    await expect(routing.generate(withRef, { signal })).rejects.toThrow(NoProviderError);
+  });
+
+  it("suggests the configured order for a paid provider when paid fallback is on, or nothing free comes first", async () => {
+    const openai = paidProvider({ supports: { ...paidProvider().supports, referenceImage: true } });
+    const comfyui = fakeProvider("comfyui");
+    const allowed = router("comfyui,openai", { comfyui, openai }, { DARKROOM_ALLOW_PAID_FALLBACK: "true" });
+    await expect(allowed.generate(withRef, { provider: "comfyui", signal })).rejects.toThrow(/leave out provider/);
+    const paidFirst = router("openai,comfyui", { comfyui, openai });
+    await expect(paidFirst.generate(withRef, { provider: "comfyui", signal })).rejects.toThrow(/leave out provider/);
   });
 
   it("says so when no enabled provider can use a reference", async () => {

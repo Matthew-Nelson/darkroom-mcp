@@ -163,13 +163,23 @@ export class Router {
   }
 
   private cantUseReference(name: ProviderName): string {
-    const able = [...this.providers.values()].filter((p) => p.supports.referenceImage).map((p) => p.name);
-    const next =
-      able.length > 0
-        ? `Enabled providers that can: ${able.join(", ")}. ` +
-          "Leave out provider to use the configured order, or drop reference_image."
-        : "No enabled provider can, so drop reference_image.";
-    return `Provider "${name}" can't use a reference image. ${next}`;
+    const order = this.config.providerOrder;
+    const able = order.filter((n) => this.providers.get(n)?.supports.referenceImage);
+    const cant = `Provider "${name}" can't use a reference image.`;
+    if (able.length === 0) return `${cant} No enabled provider can, so drop reference_image.`;
+    // Leaving out provider only helps if the walk can get to one of them: a free one, or a
+    // paid one the gate lets through (no free provider ahead of it, or paid fallback on).
+    const reachable = able.some(
+      (n) =>
+        !PAID_PROVIDERS.has(n) ||
+        this.config.allowPaidFallback ||
+        !order.slice(0, order.indexOf(n)).some((before) => !PAID_PROVIDERS.has(before)),
+    );
+    const next = reachable
+      ? "Name one, leave out provider to use the configured order, or drop reference_image."
+      : "Name one to use it, or drop reference_image. Leaving out provider won't reach a paid provider after a free one " +
+        "unless DARKROOM_ALLOW_PAID_FALLBACK=true.";
+    return `${cant} Enabled providers that can: ${able.join(", ")}. ${next}`;
   }
 
   private async closeFailed(reservation: Reservation, err: unknown): Promise<void> {
