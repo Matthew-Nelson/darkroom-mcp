@@ -25,7 +25,7 @@ Use this when the user wants an image: an illustration, icon, photo, mockup, dia
 
 By default this runs on a free local model. Local generation is slow (minutes, not seconds: about 1.5 minutes for "draft", 3 to 4 minutes for "final"), so iterate with quality "draft" and render "final" only once the composition is right, passing the draft's seed. With the default local model a new seed gives nearly the same picture, so to explore variations, reword the prompt instead of changing the seed.
 
-To base the image on an existing one (edit a photo, restyle a logo, vary an earlier result), pass its path as "reference_image". Describe the whole image you want, including what to keep from the reference, not only the change: the default local model re-renders the reference rather than editing it in place, keeping its composition and colors, while paid providers follow edit instructions closely. The output matches the reference's shape unless you pass aspect_ratio.
+To base the image on an existing one (edit a photo, restyle a logo, vary an earlier result), pass its path as "reference_image". Describe the whole image you want, including what to keep from the reference, not only the change: the default local model re-renders the reference rather than editing it in place, keeping its composition and colors, while paid providers follow edit instructions closely. The output matches the reference's shape unless you pass aspect_ratio. With the local model, reference_strength sets how far the result may move from the reference: about 0.5 for photos and variations, about 0.7 to restyle flat graphics such as logos and icons (lower values nearly copy them), 0.8 or more for something only loosely based on it. Plain backgrounds tend to survive any strength that keeps the subject.
 
 Only pass "provider" when the user explicitly asks for a specific provider, because some providers cost money. Otherwise leave it out and the configured default is used. If a provider is unavailable or fails, the next one in the configured order is tried; tell the user when skipped_providers is not empty.`;
 
@@ -78,6 +78,14 @@ const inputSchema = {
     .describe(
       "An image to base the result on: the absolute path of any local PNG, JPEG, or WebP, or the filename of an earlier Darkroom image. Providers that can't use one are skipped.",
     ),
+  reference_strength: z
+    .number()
+    .min(0.1)
+    .max(1)
+    .optional()
+    .describe(
+      "With reference_image: how far the result may move from it, 0.1 (nearly a copy) to 1 (ignores it). Default 0.5. Used by the local model; paid providers edit from the prompt instead and ignore it (reported in ignored_params).",
+    ),
 };
 
 const outputSchema = {
@@ -128,6 +136,7 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
         ...(args.negative_prompt !== undefined && { negativePrompt: args.negative_prompt }),
         ...(args.seed !== undefined && { seed: args.seed }),
         ...(reference && { referenceImage: reference.image }),
+        ...(reference && args.reference_strength !== undefined && { referenceStrength: args.reference_strength }),
       };
 
       const started = performance.now();
@@ -143,6 +152,10 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
         const ignored: string[] = [];
         if (args.negative_prompt !== undefined && !provider.supports.negativePrompt) ignored.push("negative_prompt");
         if (args.seed !== undefined && !provider.supports.seed) ignored.push("seed");
+        // Also ignored without a reference, since there's nothing for it to apply to.
+        if (args.reference_strength !== undefined && !(reference && provider.supports.referenceStrength)) {
+          ignored.push("reference_strength");
+        }
 
         const costUsd = result.actualCostUsd ?? provider.estimateCostUsd(req);
         const facts = {

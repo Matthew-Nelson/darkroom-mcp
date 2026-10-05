@@ -238,11 +238,12 @@ describe("comfyui provider: generate", () => {
     const p = fakeComfy().provider();
     expect(p.isPaid).toBe(false);
     expect(p.estimateCostUsd(request)).toBe(0);
-    expect(p.supports).toEqual({ negativePrompt: false, seed: true, referenceImage: true });
+    expect(p.supports).toEqual({ negativePrompt: false, seed: true, referenceImage: true, referenceStrength: true });
   });
 
   it("can't take a reference image with a template that has no image-to-image companion", () => {
-    expect(fakeComfy().provider({ workflow: textOnly }).supports.referenceImage).toBe(false);
+    const { supports } = fakeComfy().provider({ workflow: textOnly });
+    expect([supports.referenceImage, supports.referenceStrength]).toEqual([false, false]);
   });
 
   it("explains a rejected workflow using ComfyUI's node errors", async () => {
@@ -330,6 +331,13 @@ describe("comfyui provider: reference image", () => {
     expect(g.latent).toBeUndefined();
     expect(result).toMatchObject({ model: "z-image-turbo-q4_k_m", seed: 7, actualCostUsd: 0 });
     expect(progress[0]).toBe("Uploading the reference image to ComfyUI");
+  });
+
+  it("sets the sampler's denoise from reference_strength", async () => {
+    const comfy = fakeComfy();
+    await comfy.provider().generate({ ...request, referenceImage: await reference(), referenceStrength: 0.7 }, signal());
+    const [submitted] = comfy.posted("/prompt") as Submitted[];
+    expect(submitted?.prompt.sample?.inputs.denoise).toBe(0.7);
   });
 
   it("names the same reference the same way, so it's stored once", async () => {

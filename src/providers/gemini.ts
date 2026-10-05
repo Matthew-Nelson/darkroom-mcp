@@ -110,7 +110,7 @@ export function createGeminiProvider(opts: GeminiOptions): ImageProvider {
     // Not exact: the same seed gives the same composition, slightly reframed, and it
     // carries from a 512px draft to a 1K final (M5 benchmark).
     // A reference image goes in as an inline part beside the prompt; Gemini edits from instructions.
-    supports: { negativePrompt: false, seed: true, referenceImage: true },
+    supports: { negativePrompt: false, seed: true, referenceImage: true, referenceStrength: false },
     estimateCostUsd,
 
     // Free and offline, per the spec: a paid provider is healthy when it has its key.

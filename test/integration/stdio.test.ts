@@ -73,6 +73,7 @@ describe("darkroom over stdio", () => {
       "seed",
       "filename",
       "reference_image",
+      "reference_strength",
     ]);
     expect(tool?.outputSchema?.properties).toHaveProperty("path");
   });
@@ -182,9 +183,15 @@ describe("darkroom over stdio", () => {
       expect((sidecar.reference as { sha256: string }).sha256).toMatch(/^[0-9a-f]{64}$/);
 
       // An explicit aspect ratio wins, and an earlier Darkroom image can be named by its filename.
+      // The mock has no strength dial, so it reports reference_strength as ignored.
       const byName = basename(out.path as string);
-      const again = await call(c, { prompt: "square", reference_image: byName, aspect_ratio: "1:1" });
-      expect(again.structuredContent).toMatchObject({ width: 512, height: 512, reference_image: out.path });
+      const again = await call(c, { prompt: "sq", reference_image: byName, aspect_ratio: "1:1", reference_strength: 0.7 });
+      expect(again.structuredContent).toMatchObject({
+        width: 512,
+        height: 512,
+        reference_image: out.path,
+        ignored_params: ["reference_strength"],
+      });
     } finally {
       await rm(photo, { force: true });
     }
@@ -200,7 +207,14 @@ describe("darkroom over stdio", () => {
 
   it("rejects invalid input through the schema", async () => {
     const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
-    for (const args of [{ prompt: "" }, { prompt: "x".repeat(4001) }, { prompt: "x", aspect_ratio: "4:3" }]) {
+    const bad = [
+      { prompt: "" },
+      { prompt: "x".repeat(4001) },
+      { prompt: "x", aspect_ratio: "4:3" },
+      { prompt: "x", reference_strength: 0 },
+      { prompt: "x", reference_strength: 1.5 },
+    ];
+    for (const args of bad) {
       const result = await call(c, args);
       expect(result.isError).toBe(true);
     }

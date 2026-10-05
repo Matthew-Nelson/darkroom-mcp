@@ -27,6 +27,7 @@ const MappingSchema = z.object({
     width: nodeInput,
     height: nodeInput,
     referenceImage: nodeInput.optional(),
+    denoise: nodeInput.optional(), // in an image-to-image template: where reference_strength goes
   }),
   output: z.object({ node: z.string().min(1) }),
   models: z.array(
@@ -62,6 +63,7 @@ export interface WorkflowValues {
   width: number;
   height: number;
   referenceImage?: string | undefined; // the uploaded file's name in ComfyUI's input folder
+  denoise?: number | undefined; // unset keeps the template's own value
 }
 
 export class WorkflowError extends Error {
@@ -137,6 +139,7 @@ export function buildGraph(workflow: Workflow, values: WorkflowValues): Workflow
   set(inputs.width, values.width);
   set(inputs.height, values.height);
   if (inputs.referenceImage && values.referenceImage !== undefined) set(inputs.referenceImage, values.referenceImage);
+  if (inputs.denoise && values.denoise !== undefined) set(inputs.denoise, values.denoise);
   for (const model of models) set(model, model.file);
   return graph;
 }

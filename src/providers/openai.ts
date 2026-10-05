@@ -103,7 +103,7 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
     model,
     isPaid: true,
     // A reference image goes to the edits endpoint, which follows edit instructions.
-    supports: { negativePrompt: false, seed: false, referenceImage: true },
+    supports: { negativePrompt: false, seed: false, referenceImage: true, referenceStrength: false },
     estimateCostUsd,
 
     // Free and offline, per the spec: a paid provider is healthy when it has its key.

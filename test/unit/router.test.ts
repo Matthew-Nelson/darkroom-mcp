@@ -27,7 +27,7 @@ function fakeProvider(name: string, over: Partial<ImageProvider> = {}): ImagePro
     name,
     model: `${name}-model`,
     isPaid: false,
-    supports: { negativePrompt: false, seed: true, referenceImage: false },
+    supports: { negativePrompt: false, seed: true, referenceImage: false, referenceStrength: false },
     estimateCostUsd: () => 0,
     healthCheck: () => Promise.resolve({ ok: true }),
     generate: vi.fn(() =>
@@ -463,7 +463,7 @@ describe("Router paid gate", () => {
 describe("Router reference images", () => {
   const withRef: GenerateRequest = { ...req, referenceImage: { png: Buffer.from("png"), width: 512, height: 512 } };
   const canRef = (name: string, over: Partial<ImageProvider> = {}) =>
-    fakeProvider(name, { supports: { negativePrompt: false, seed: true, referenceImage: true }, ...over });
+    fakeProvider(name, { supports: { ...fakeProvider(name).supports, referenceImage: true }, ...over });
 
   it("sends a reference to a provider that can use one", async () => {
     const mock = canRef("mock");
@@ -489,7 +489,7 @@ describe("Router reference images", () => {
   });
 
   it("doesn't step from a free provider that can't use a reference to a paid one by default", async () => {
-    const openai = paidProvider({ supports: { negativePrompt: false, seed: false, referenceImage: true } });
+    const openai = paidProvider({ supports: { ...paidProvider().supports, referenceImage: true } });
     const routing = router("comfyui,openai", { comfyui: fakeProvider("comfyui"), openai }).generate(withRef, { signal });
     await expect(routing).rejects.toThrow(/comfyui: can't use a reference image; openai: not used because comfyui was skipped/);
     expect(openai.generate).not.toHaveBeenCalled();
@@ -497,7 +497,7 @@ describe("Router reference images", () => {
   });
 
   it("steps to a paid provider that can use a reference with DARKROOM_ALLOW_PAID_FALLBACK=true", async () => {
-    const openai = paidProvider({ supports: { negativePrompt: false, seed: false, referenceImage: true } });
+    const openai = paidProvider({ supports: { ...paidProvider().supports, referenceImage: true } });
     const routed = await router("comfyui,openai", { comfyui: fakeProvider("comfyui"), openai }, {
       DARKROOM_ALLOW_PAID_FALLBACK: "true",
     }).generate(withRef, { signal });

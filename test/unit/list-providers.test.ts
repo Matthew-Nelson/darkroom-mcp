@@ -25,7 +25,7 @@ function fakeProvider(name: string, over: Partial<ImageProvider> = {}): ImagePro
     name,
     model: `${name}-model`,
     isPaid: false,
-    supports: { negativePrompt: false, seed: true, referenceImage: false },
+    supports: { negativePrompt: false, seed: true, referenceImage: false, referenceStrength: false },
     estimateCostUsd: () => 0,
     healthCheck: () => Promise.resolve({ ok: true }),
     generate: vi.fn(() => Promise.reject(new Error("not used"))),
@@ -51,7 +51,7 @@ describe("providerStatus", () => {
     const comfyui = fakeProvider("comfyui", {
       healthCheck: () => Promise.resolve({ ok: false, detail: "ComfyUI is down" }),
     });
-    const mock = fakeProvider("mock", { supports: { negativePrompt: false, seed: true, referenceImage: true } });
+    const mock = fakeProvider("mock", { supports: { ...fakeProvider("mock").supports, referenceImage: true } });
     const out = await status({ DARKROOM_PROVIDER_ORDER: "comfyui,mock" }, { comfyui, mock });
     expect(out.order).toEqual(["comfyui", "mock"]);
     expect(out.allow_paid_fallback).toBe(false);

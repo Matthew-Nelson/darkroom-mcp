@@ -53,7 +53,7 @@ function paidProvider(over: Partial<ImageProvider> = {}): ImageProvider {
     name: "openai",
     model: "gpt-test",
     isPaid: true,
-    supports: { negativePrompt: false, seed: false, referenceImage: false },
+    supports: { negativePrompt: false, seed: false, referenceImage: false, referenceStrength: false },
     estimateCostUsd: () => 0.3,
     healthCheck: () => Promise.resolve({ ok: true }),
     generate: vi.fn(async () => ({ png: await png, model: "gpt-test", width: 64, height: 48, seed: null, actualCostUsd: 0.25 })),

@@ -232,6 +232,7 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
       negativePrompt: mapping.inputs.negativePrompt !== undefined,
       seed: true,
       referenceImage: workflow.img2img !== undefined,
+      referenceStrength: workflow.img2img?.mapping.inputs.denoise !== undefined,
     },
     estimateCostUsd: () => 0,
 
@@ -282,7 +283,7 @@ export function createComfyUIProvider(opts: ComfyUIOptions): ImageProvider {
           onProgress?.({ message: "Uploading the reference image to ComfyUI" });
           referenceImage = await upload(req.referenceImage, run);
         }
-        const graph = buildGraph(template, { ...values, referenceImage });
+        const graph = buildGraph(template, { ...values, referenceImage, denoise: req.referenceStrength });
         sending = true;
         promptId = await submit(graph, promptId, clientId, run);
         submitted = true;

@@ -22,7 +22,7 @@ export function providerContract(label: string, make: () => ImageProvider | Prom
       expect(PROVIDER_NAMES).toContain(p.name);
       expect(p.model).toMatch(/\S/);
       expect(p.isPaid).toBe(PAID_PROVIDERS.has(p.name as ProviderName));
-      expect(Object.keys(p.supports).sort()).toEqual(["negativePrompt", "referenceImage", "seed"]);
+      expect(Object.keys(p.supports).sort()).toEqual(["negativePrompt", "referenceImage", "referenceStrength", "seed"]);
       for (const value of Object.values(p.supports)) expect(typeof value).toBe("boolean");
     });
 

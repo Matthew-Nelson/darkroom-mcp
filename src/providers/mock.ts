@@ -15,7 +15,7 @@ export function createMockProvider(): ImageProvider {
     name: "mock",
     model: MODEL,
     isPaid: false,
-    supports: { negativePrompt: false, seed: true, referenceImage: true },
+    supports: { negativePrompt: false, seed: true, referenceImage: true, referenceStrength: false },
     estimateCostUsd: () => 0,
     healthCheck: () => Promise.resolve({ ok: true }),
     async generate(req: GenerateRequest, signal: AbortSignal, onProgress?: ProgressListener): Promise<GenerateResult> {

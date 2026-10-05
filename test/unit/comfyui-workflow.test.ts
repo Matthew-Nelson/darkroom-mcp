@@ -27,6 +27,7 @@ describe("ComfyUI workflow templates", () => {
     const i2i = wf.img2img;
     expect(i2i?.name).toBe("zimage-img2img");
     expect(i2i?.mapping.inputs.referenceImage).toEqual({ node: "reference", input: "image" });
+    expect(i2i?.mapping.inputs.denoise).toEqual({ node: "sample", input: "denoise" });
     expect(i2i?.graph.sample?.inputs.latent_image).toEqual(["encode", 0]);
     expect(i2i?.graph.sample?.inputs.denoise).toBeLessThan(1);
     expect(nodeClasses(wf)).toEqual(expect.arrayContaining(["LoadImage", "ImageScale", "VAEEncode", "EmptySD3LatentImage"]));
@@ -41,6 +42,9 @@ describe("ComfyUI workflow templates", () => {
     if (!i2i) throw new Error("expected a companion");
     const graph = buildGraph(i2i, { prompt: "p", seed: 1, width: 624, height: 416, referenceImage: "darkroom/x.png" });
     expect(graph.reference?.inputs.image).toBe("darkroom/x.png");
+    expect(graph.sample?.inputs.denoise).toBe(0.5); // the template's default when no strength is given
+    const stronger = buildGraph(i2i, { prompt: "p", seed: 1, width: 64, height: 64, denoise: 0.75 });
+    expect(stronger.sample?.inputs.denoise).toBe(0.75);
     expect([graph.scale?.inputs.width, graph.scale?.inputs.height]).toEqual([624, 416]);
   });
 
