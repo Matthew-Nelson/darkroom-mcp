@@ -25,7 +25,7 @@ TypeScript MCP server that gives Claude Code an image generation tool across swa
 
 ## Branches and PRs
 
-Remote: `github.com/Matthew-Nelson/darkroom-mcp` (private). `main` only changes through merged PRs and is always green.
+Remote: `github.com/Matthew-Nelson/darkroom-mcp` (public). `main` only changes through merged PRs and is always green.
 
 - **One branch and one PR per milestone.** A milestone is a reviewable unit. Name the branch `m<N>/<topic>` (e.g. `m3/router-guardrails`); for work outside a milestone, use `fix/<topic>`, `chore/<topic>`, or `docs/<topic>`, each with its own PR.
 - **Small commits inside the branch**, each passing `npm run check`, with messages that say why. The commits are how Matt reviews the milestone piece by piece, so keep each one to a single idea (e.g. the ledger, one provider, the contract suite).
