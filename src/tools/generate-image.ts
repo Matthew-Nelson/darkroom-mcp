@@ -210,7 +210,7 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
           structuredContent: output,
         };
       } catch (err) {
-        return errorResult(err);
+        return errorResult(err, { reference: reference !== undefined });
       } finally {
         progress?.stop();
       }
@@ -294,9 +294,14 @@ function summarize(o: Output): string {
   return lines.join("\n");
 }
 
-function errorResult(err: unknown): CallToolResult {
+export function errorResult(err: unknown, opts: { reference?: boolean } = {}): CallToolResult {
   let text: string;
-  if (err instanceof ContentRefusedError) {
+  if (err instanceof ContentRefusedError && opts.reference) {
+    // Moderation and safety checks look at the image too, so it may be what was refused.
+    text =
+      `The provider refused this prompt or its reference image: ${err.message}. ` +
+      "Rephrase the request or try a different image; Darkroom does not retry refused requests on another provider.";
+  } else if (err instanceof ContentRefusedError) {
     text = `The provider refused this prompt: ${err.message}. Rephrase the request; Darkroom does not retry refused prompts on another provider.`;
   } else if (err instanceof ReferenceImageError) {
     text = `Couldn't use the reference image: ${err.message}`;
