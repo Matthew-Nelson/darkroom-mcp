@@ -4,7 +4,7 @@ An MCP server that gives Claude Code an image generation tool. Claude writes the
 
 Providers are swappable: a free local model (Z-Image Turbo via ComfyUI) by default, OpenAI or Gemini as opt-in paid options, and a `mock` provider for tests and demos.
 
-> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` and `gemini` providers work, with fallback between them, a daily spend cap, and five tools: three for generating and finding images, plus alt text and a WCAG contrast check for images headed into a page. Any provider can base an image on a reference image (M7, awaiting review). It isn't published to npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
+> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` and `gemini` providers work, with fallback between them, a daily spend cap, and five tools: three for generating and finding images, plus alt text and a WCAG contrast check for images headed into a page. Any provider can base an image on a reference image. It isn't published to npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
 
 ## How it works
 

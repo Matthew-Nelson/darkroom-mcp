@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M7 awaiting review (reference images, branch `m7/reference-image`) · built, benchmarked, and accepted · next: Matt's smoke test and review
+## Current: M7 done (reference images, tagged `m7`) · Phase 2 roadmap complete · next: only the unscheduled GitHub release, or new work Matt picks
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 | M5: Gemini provider | done | `m5` |
 | Fix: ComfyUI cancel path (M1 review Lows) | done | — |
 | M6: Accessibility metadata | done | `m6` |
-| M7: Image-to-image and editing | awaiting review | `m7` |
+| M7: Image-to-image and editing | done | `m7` |
 | Later: GitHub release | not scheduled | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
@@ -80,8 +80,8 @@ Done when (agreed with Matt, Oct 3, 2026):
 - [x] Done when: the same reference image and prompt run on every provider that supports it by changing only `provider` (mock, comfyui, openai, gemini)
 - [x] Done when: a provider without support refuses clearly (a ComfyUI template with no image-to-image companion, named explicitly)
 - [x] Paid benchmark within the agreed $0.75: about $0.33 spent
-- [ ] Matt approved
-- [ ] Tagged `m7`
+- [x] Matt approved and merged PR #18 (after a multi-model review; all 6 findings fixed)
+- [x] Tagged `m7`
 
 ## M6 gates
 
@@ -97,8 +97,10 @@ Done when (agreed with Matt, Oct 4, 2026; decisions in SPEC.md under "Phase 2 ro
 
 Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short plan for Matt:
 
-1. **M7: Image-to-image and editing** (`m7/…`): `reference_image` on `generate_image`. Starts with a short plan, including which providers skip or refuse a reference and the cost of the small paid benchmark.
-2. **Later:** a GitHub release.
+The Phase 2 roadmap is done. What's left, none of it scheduled:
+
+1. **Later:** a GitHub release.
+2. **Proposed, not decided:** more aspect ratios (4:3, 3:4, maybe 4:5 and 5:4; Gemini supports them natively and OpenAI takes almost any size) and, locally, rendering at a reference's exact shape when no `aspect_ratio` is given, so the image-to-image template doesn't crop it. Raised by Matt on Oct 4, 2026, after seeing local results come back reframed. A spec change, so it needs Matt's go-ahead.
 
 ## Deviations from spec
 
@@ -148,6 +150,10 @@ Roadmap in SPEC.md under "Phase 2 roadmap". In order, each starting with a short
 - ~~License~~ Resolved at the start of M4: MIT.
 
 ## Log
+
+### Oct 5, 2026 (UTC) — M7 done (tagged `m7`)
+
+Matt approved PR #18 after the review fixes. Spend for M7: about $0.33 of the agreed $0.75 ($0.277 through the benchmark ledger, about $0.06 for the real contract run).
 
 ### Oct 5, 2026 (UTC) — review of PR #18
 
