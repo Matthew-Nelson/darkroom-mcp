@@ -83,6 +83,13 @@ export async function loadWorkflow(name: string, dir: URL = WORKFLOWS_DIR): Prom
     }
   };
   const workflow = parseWorkflow(name, await read(`${name}.json`), await read(`${name}.map.json`));
+  // A companion as the main template would send its placeholder reference with every text-only request.
+  if (workflow.mapping.inputs.referenceImage) {
+    throw new WorkflowError(
+      `ComfyUI workflow "${name}" is an image-to-image template (its mapping has a referenceImage input). ` +
+        "Set COMFYUI_WORKFLOW to the text-to-image template that names it as img2img.",
+    );
+  }
   const companion = workflow.mapping.img2img;
   if (companion === undefined) return workflow;
   const img2img = parseWorkflow(companion, await read(`${companion}.json`), await read(`${companion}.map.json`));
@@ -96,6 +103,16 @@ export async function loadWorkflow(name: string, dir: URL = WORKFLOWS_DIR): Prom
     throw new WorkflowError(
       `ComfyUI workflow "${companion}" is an image-to-image template, so it can't name one of its own.`,
     );
+  }
+  // The provider reports one model and one supports.negativePrompt for both templates, so they must agree.
+  if (img2img.mapping.model !== workflow.mapping.model) {
+    throw new WorkflowError(
+      `ComfyUI workflow "${companion}" uses model "${img2img.mapping.model}", ` +
+        `but "${name}" uses "${workflow.mapping.model}"; an image-to-image companion must use the same model.`,
+    );
+  }
+  if ((img2img.mapping.inputs.negativePrompt === undefined) !== (workflow.mapping.inputs.negativePrompt === undefined)) {
+    throw new WorkflowError(`ComfyUI workflows "${companion}" and "${name}" must both map a negative prompt, or neither.`);
   }
   return { ...workflow, img2img };
 }

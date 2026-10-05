@@ -58,6 +58,12 @@ describe("ComfyUI workflow templates", () => {
     expect(wf.graph.pos?.inputs.text).toBe("");
   });
 
+  it("refuses an image-to-image companion as the main template (COMFYUI_WORKFLOW=zimage-img2img)", async () => {
+    await expect(loadWorkflow("zimage-img2img")).rejects.toThrow(
+      /"zimage-img2img" is an image-to-image template.*COMFYUI_WORKFLOW/,
+    );
+  });
+
   it("fails clearly for an unknown template name", async () => {
     await expect(loadWorkflow("nope")).rejects.toThrow(/Can't load ComfyUI workflow "nope" \(nope\.json\)/);
   });
@@ -125,6 +131,22 @@ describe("ComfyUI workflow templates", () => {
 
     it("can't name a companion of its own", async () => {
       await expect(load({ ...mapping, img2img: "t2" }, { ...withRef, img2img: "t" })).rejects.toThrow(/can't name one of its own/);
+    });
+
+    it("must map a negative prompt exactly when the main template does, so supports.negativePrompt holds for both", async () => {
+      const neg = { node: "a", input: "text" };
+      const companionWithNeg = { ...withRef, inputs: { ...withRef.inputs, negativePrompt: neg } };
+      await expect(load({ ...mapping, img2img: "t2" }, companionWithNeg)).rejects.toThrow(
+        /"t2" and "t" must both map a negative prompt, or neither/,
+      );
+      const mainWithNeg = { ...mapping, img2img: "t2", inputs: { ...mapping.inputs, negativePrompt: neg } };
+      await expect(load(mainWithNeg, withRef)).rejects.toThrow(/must both map a negative prompt, or neither/);
+    });
+
+    it("must use the same model, which results report", async () => {
+      await expect(load({ ...mapping, img2img: "t2" }, { ...withRef, model: "other" })).rejects.toThrow(
+        /"t2" uses model "other", but "t" uses "m"/,
+      );
     });
 
     it("fails clearly when its files are missing", async () => {
