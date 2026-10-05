@@ -63,7 +63,7 @@ describe("openai provider", () => {
     const p = provider(fakeFetch(reply("generations-200-low.json")).fetch);
     expect(p.name).toBe("openai");
     expect(p.isPaid).toBe(true);
-    expect(p.supports).toEqual({ negativePrompt: false, seed: false, referenceImage: false });
+    expect(p.supports).toEqual({ negativePrompt: false, seed: false, referenceImage: true });
     const draft = p.estimateCostUsd(request);
     const final = p.estimateCostUsd({ ...request, quality: "final" });
     expect(draft).toBeGreaterThan(0);
@@ -137,6 +137,46 @@ describe("openai provider", () => {
       quality: "low",
       output_format: "png",
     });
+  });
+
+  it("posts a reference image to the edits endpoint as multipart form data", async () => {
+    const { fetch, calls } = fakeFetch(reply("generations-200-low.json"));
+    const png = await sharp({ create: { width: 96, height: 64, channels: 3, background: "#123456" } }).png().toBuffer();
+    const progress: string[] = [];
+    const req = { ...request, aspectRatio: "3:2", referenceImage: { png, width: 96, height: 64 } } as const;
+    await provider(fetch).generate(req, signal, (u) => progress.push(u.message));
+    const [call] = calls;
+    expect(call?.url).toBe("https://api.openai.com/v1/images/edits");
+    expect(call?.init.method).toBe("POST");
+    const headers = new Headers(call?.init.headers);
+    expect(headers.get("authorization")).toBe(`Bearer ${KEY}`);
+    // fetch sets the multipart boundary itself, so no content-type is passed.
+    expect(headers.get("content-type")).toBeNull();
+    const form = call?.init.body;
+    if (!(form instanceof FormData)) throw new Error("expected a FormData body");
+    expect(Object.fromEntries([...form.entries()].filter(([, v]) => typeof v === "string"))).toEqual({
+      model: "gpt-image-2.5-flare",
+      prompt: request.prompt,
+      n: "1",
+      size: "992x672",
+      quality: "low",
+      output_format: "png",
+    });
+    const image = form.get("image[]");
+    if (!(image instanceof Blob)) throw new Error("expected the image as a file");
+    expect(image.type).toBe("image/png");
+    expect(Buffer.from(await image.arrayBuffer()).equals(png)).toBe(true);
+    expect(progress).toEqual([
+      "Waiting for OpenAI (gpt-image-2.5-flare, low quality, 992×672, with a reference image)",
+    ]);
+  });
+
+  it("adds the reference's input tokens to the estimate", () => {
+    const p = provider(fakeFetch(reply("generations-200-low.json")).fetch);
+    const referenceImage = { png: Buffer.from("png"), width: 1024, height: 1024 };
+    const extra = p.estimateCostUsd({ ...request, referenceImage }) - p.estimateCostUsd(request);
+    expect(extra).toBeGreaterThan(0.01); // input images are read at high fidelity, billed at $8 per million tokens
+    expect(extra).toBeLessThan(0.1);
   });
 
   it("renders final at about 1MP and medium quality", async () => {

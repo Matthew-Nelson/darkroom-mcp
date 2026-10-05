@@ -13,10 +13,12 @@ import {
   type Quality,
 } from "./types.js";
 
-// OpenAI Images API (POST /v1/images/generations) with a gpt-image model. Paid:
-// billed by tokens, so the result carries the actual cost from `usage`.
+// OpenAI Images API with a gpt-image model: POST /v1/images/generations, or
+// /v1/images/edits when there's a reference image. Paid: billed by tokens, so the
+// result carries the actual cost from `usage`.
 
 const ENDPOINT = "https://api.openai.com/v1/images/generations";
+const EDITS_ENDPOINT = "https://api.openai.com/v1/images/edits";
 
 // USD per 1M tokens, from developers.openai.com/api/docs/pricing (checked Oct 2, 2026).
 // Only models that accept arbitrary sizes are listed; adding one is one line.
@@ -39,6 +41,11 @@ export const OPENAI_RATES: Record<string, Rates> = {
 // tokens ($0.0089), so a square is ~425 (third-party counts say ~439); 700 leaves
 // extra room. The router warns if an actual cost beats its estimate.
 const ESTIMATED_OUTPUT_TOKENS: Record<Quality, number> = { draft: 215, final: 700 };
+
+// Input tokens for a reference image. gpt-image-2 models always read input images at
+// high fidelity (input_fidelity can't be set), billed at the image input rate. A guess
+// that errs high until M7's benchmark calibrates it.
+const ESTIMATED_REFERENCE_TOKENS = 5_000;
 
 // Prompt text tokens: the benchmark prompt ran ~3.4 characters per token; 3 errs high.
 const estimatePromptTokens = (prompt: string) => Math.ceil(prompt.length / 3) + 20;
@@ -82,14 +89,21 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
 
   function estimateCostUsd(req: GenerateRequest): number {
     const promptTokens = estimatePromptTokens(req.prompt);
-    return roundUsd((promptTokens * rates.textInput + ESTIMATED_OUTPUT_TOKENS[req.quality] * rates.imageOutput) / 1e6);
+    const referenceTokens = req.referenceImage ? ESTIMATED_REFERENCE_TOKENS : 0;
+    return roundUsd(
+      (promptTokens * rates.textInput +
+        referenceTokens * rates.imageInput +
+        ESTIMATED_OUTPUT_TOKENS[req.quality] * rates.imageOutput) /
+        1e6,
+    );
   }
 
   return {
     name: "openai",
     model,
     isPaid: true,
-    supports: { negativePrompt: false, seed: false, referenceImage: false },
+    // A reference image goes to the edits endpoint, which follows edit instructions.
+    supports: { negativePrompt: false, seed: false, referenceImage: true },
     estimateCostUsd,
 
     // Free and offline, per the spec: a paid provider is healthy when it has its key.
@@ -112,7 +126,9 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
       }
       const { width, height } = openaiSize(req.aspectRatio, req.quality);
       const quality = QUALITY[req.quality];
-      onProgress?.({ message: `Waiting for OpenAI (${model}, ${quality} quality, ${width}×${height})` });
+      const withRef = req.referenceImage ? ", with a reference image" : "";
+      onProgress?.({ message: `Waiting for OpenAI (${model}, ${quality} quality, ${width}×${height}${withRef})` });
+      const fields = { model, prompt: req.prompt, n: 1, size: `${width}x${height}`, quality, output_format: "png" };
 
       const timeout = AbortSignal.timeout(timeoutMs);
       // The body is read under the same signal, so a cancel or timeout mid-download
@@ -120,18 +136,14 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
       let res: Response | undefined;
       let text: string;
       try {
-        res = await fetchFn(ENDPOINT, {
+        const auth = { authorization: `Bearer ${apiKey}` };
+        res = await fetchFn(req.referenceImage ? EDITS_ENDPOINT : ENDPOINT, {
           method: "POST",
           signal: AbortSignal.any([signal, timeout]),
-          headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-          body: JSON.stringify({
-            model,
-            prompt: req.prompt,
-            n: 1,
-            size: `${width}x${height}`,
-            quality,
-            output_format: "png",
-          }),
+          // A FormData body gets its multipart content-type (with the boundary) from fetch.
+          ...(req.referenceImage
+            ? { headers: auth, body: editForm(fields, req.referenceImage.png) }
+            : { headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify(fields) }),
         });
         text = await res.text();
       } catch (err) {
@@ -173,6 +185,14 @@ export function createOpenAIProvider(opts: OpenAIOptions): ImageProvider {
       };
     },
   };
+}
+
+/** The edits endpoint's multipart body: the same fields as a generation, plus the image as a file. */
+function editForm(fields: Record<string, string | number>, png: Buffer): FormData {
+  const form = new FormData();
+  for (const [name, value] of Object.entries(fields)) form.append(name, String(value));
+  form.append("image[]", new Blob([new Uint8Array(png)], { type: "image/png" }), "reference.png");
+  return form;
 }
 
 interface Usage {
