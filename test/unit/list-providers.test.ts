@@ -25,7 +25,7 @@ function fakeProvider(name: string, over: Partial<ImageProvider> = {}): ImagePro
     name,
     model: `${name}-model`,
     isPaid: false,
-    supports: { negativePrompt: false, seed: true },
+    supports: { negativePrompt: false, seed: true, referenceImage: false, referenceStrength: false },
     estimateCostUsd: () => 0,
     healthCheck: () => Promise.resolve({ ok: true }),
     generate: vi.fn(() => Promise.reject(new Error("not used"))),
@@ -51,13 +51,22 @@ describe("providerStatus", () => {
     const comfyui = fakeProvider("comfyui", {
       healthCheck: () => Promise.resolve({ ok: false, detail: "ComfyUI is down" }),
     });
-    const out = await status({ DARKROOM_PROVIDER_ORDER: "comfyui,mock" }, { comfyui, mock: fakeProvider("mock") });
+    const mock = fakeProvider("mock", { supports: { ...fakeProvider("mock").supports, referenceImage: true } });
+    const out = await status({ DARKROOM_PROVIDER_ORDER: "comfyui,mock" }, { comfyui, mock });
     expect(out.order).toEqual(["comfyui", "mock"]);
     expect(out.allow_paid_fallback).toBe(false);
     const free = { paid: false, estimated_cost_usd: { draft: 0, final: 0 } };
     expect(out.providers).toEqual([
-      { name: "comfyui", enabled: true, healthy: false, detail: "ComfyUI is down", model: "comfyui-model", ...free },
-      { name: "mock", enabled: true, healthy: true, detail: null, model: "mock-model", ...free },
+      {
+        name: "comfyui",
+        enabled: true,
+        healthy: false,
+        detail: "ComfyUI is down",
+        model: "comfyui-model",
+        ...free,
+        reference_image: false,
+      },
+      { name: "mock", enabled: true, healthy: true, detail: null, model: "mock-model", ...free, reference_image: true },
       {
         name: "openai",
         enabled: false,
@@ -66,6 +75,7 @@ describe("providerStatus", () => {
         model: null,
         paid: true,
         estimated_cost_usd: null,
+        reference_image: null,
       },
       {
         name: "gemini",
@@ -75,6 +85,7 @@ describe("providerStatus", () => {
         model: null,
         paid: true,
         estimated_cost_usd: null,
+        reference_image: null,
       },
     ]);
   });
@@ -103,6 +114,7 @@ describe("providerStatus", () => {
       model: "openai-model",
       paid: true,
       estimated_cost_usd: { draft: 0.007, final: 0.021 },
+      reference_image: false,
     });
   });
 

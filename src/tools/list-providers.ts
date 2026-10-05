@@ -26,6 +26,10 @@ const providerSchema = z.object({
     .object({ draft: z.number(), final: z.number() })
     .nullable()
     .describe("Estimated cost of one square image at each quality; null when the provider isn't enabled or isn't built yet"),
+  reference_image: z
+    .boolean()
+    .nullable()
+    .describe("Whether it can base an image on generate_image's reference_image; null when not enabled or not built yet"),
 });
 
 const outputSchema = {
@@ -61,7 +65,7 @@ export async function providerStatus(deps: ListProvidersDeps): Promise<ProviderS
   const oneStatus = async (name: ProviderName): Promise<ProviderStatus["providers"][number]> => {
     const paid = PAID_PROVIDERS.has(name);
     const enabled = order.includes(name);
-    const unbuilt = { name, enabled, healthy: null, model: null, paid, estimated_cost_usd: null };
+    const unbuilt = { name, enabled, healthy: null, model: null, paid, estimated_cost_usd: null, reference_image: null };
     if (!implemented.has(name)) return { ...unbuilt, detail: NOT_BUILT };
     const provider = router.provider(name);
     if (!provider) {
@@ -87,6 +91,7 @@ export async function providerStatus(deps: ListProvidersDeps): Promise<ProviderS
       model: provider.model,
       paid: provider.isPaid,
       estimated_cost_usd: { draft: estimate("draft"), final: estimate("final") },
+      reference_image: provider.supports.referenceImage,
     };
   };
 
@@ -146,6 +151,7 @@ function summarize(s: ProviderStatus): string {
     } else {
       parts.push(p.paid ? "paid" : "free");
     }
+    if (p.reference_image !== null) parts.push(p.reference_image ? "takes a reference image" : "no reference images");
     lines.push(`${parts.join(", ")}.${p.detail ? ` ${p.detail}` : ""}`);
   }
   return lines.join("\n");

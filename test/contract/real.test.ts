@@ -4,7 +4,7 @@ import { createComfyUIProvider } from "../../src/providers/comfyui.js";
 import { loadWorkflow } from "../../src/providers/comfyui-workflow.js";
 import { createGeminiProvider } from "../../src/providers/gemini.js";
 import { createOpenAIProvider } from "../../src/providers/openai.js";
-import { ONE_DRAFT, providerContract } from "./contract.js";
+import { ONE_DRAFT, providerContract, REFERENCE_DRAFT, referenceImage } from "./contract.js";
 
 // The same contract against real providers, only when asked:
 //   DARKROOM_CONTRACT_COMFYUI=1 npm run test:contract                  (a few minutes, free)
@@ -21,6 +21,7 @@ if (comfyuiOn && config) {
   const workflow = await loadWorkflow(config.comfyui.workflow);
   providerContract("comfyui (real server)", () => createComfyUIProvider({ ...config.comfyui, workflow }), {
     cases: ONE_DRAFT,
+    referenceCase: REFERENCE_DRAFT,
     timeoutMs: config.comfyui.timeoutMs + 30_000,
   });
 }
@@ -28,23 +29,35 @@ if (comfyuiOn && config) {
 if (openaiOn && config) {
   if (!config.openai.apiKey) throw new Error("DARKROOM_CONTRACT_OPENAI=1 needs DARKROOM_OPENAI_API_KEY.");
   const make = () => createOpenAIProvider(config.openai);
-  const estimate = ONE_DRAFT.reduce((sum, req) => sum + make().estimateCostUsd(req), 0);
+  const reference = make().estimateCostUsd({ ...REFERENCE_DRAFT, referenceImage: await referenceImage() });
+  const estimate = ONE_DRAFT.reduce((sum, req) => sum + make().estimateCostUsd(req), reference);
   process.stderr.write(
-    `\n[contract] Real OpenAI run: ${ONE_DRAFT.length} draft image(s) with ${config.openai.model}, ` +
+    `\n[contract] Real OpenAI run: ${ONE_DRAFT.length + 1} draft images (one from a reference image) ` +
+      `with ${config.openai.model}, ` +
       `estimated at about $${estimate.toFixed(4)}. This bypasses the spend ledger.\n\n`,
   );
-  providerContract("openai (real API)", make, { cases: ONE_DRAFT, timeoutMs: config.openai.timeoutMs + 10_000 });
+  providerContract("openai (real API)", make, {
+    cases: ONE_DRAFT,
+    referenceCase: REFERENCE_DRAFT,
+    timeoutMs: config.openai.timeoutMs + 10_000,
+  });
 }
 
 if (geminiOn && config) {
   if (!config.gemini.apiKey) throw new Error("DARKROOM_CONTRACT_GEMINI=1 needs DARKROOM_GEMINI_API_KEY.");
   const make = () => createGeminiProvider(config.gemini);
-  const estimate = ONE_DRAFT.reduce((sum, req) => sum + make().estimateCostUsd(req), 0);
+  const reference = make().estimateCostUsd({ ...REFERENCE_DRAFT, referenceImage: await referenceImage() });
+  const estimate = ONE_DRAFT.reduce((sum, req) => sum + make().estimateCostUsd(req), reference);
   process.stderr.write(
-    `\n[contract] Real Gemini run: ${ONE_DRAFT.length} draft image(s) with ${config.gemini.model}, ` +
+    `\n[contract] Real Gemini run: ${ONE_DRAFT.length + 1} draft images (one from a reference image) ` +
+      `with ${config.gemini.model}, ` +
       `estimated at about $${estimate.toFixed(4)}. This bypasses the spend ledger.\n\n`,
   );
-  providerContract("gemini (real API)", make, { cases: ONE_DRAFT, timeoutMs: config.gemini.timeoutMs + 10_000 });
+  providerContract("gemini (real API)", make, {
+    cases: ONE_DRAFT,
+    referenceCase: REFERENCE_DRAFT,
+    timeoutMs: config.gemini.timeoutMs + 10_000,
+  });
 }
 
 describe("real-provider contract runs", () => {

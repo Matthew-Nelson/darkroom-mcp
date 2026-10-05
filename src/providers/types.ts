@@ -4,12 +4,24 @@ export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 export const QUALITIES = ["draft", "final"] as const;
 export type Quality = (typeof QUALITIES)[number];
 
+// An image the result should be based on, already decoded, turned upright, and
+// re-encoded as PNG (see src/reference-image.ts), so providers never see the raw file.
+export interface ReferenceImage {
+  png: Buffer;
+  width: number;
+  height: number;
+}
+
 export interface GenerateRequest {
   prompt: string;
   negativePrompt?: string;
   aspectRatio: AspectRatio;
   quality: Quality;
   seed?: number;
+  referenceImage?: ReferenceImage;
+  // How far the result may move from the reference, 0.1–1.0. Only a provider that
+  // re-renders the reference (ComfyUI's denoise) has a dial for it.
+  referenceStrength?: number;
 }
 
 export interface GenerateResult {
@@ -34,7 +46,9 @@ export interface ImageProvider {
   name: string;
   model: string; // what GenerateResult.model will say, shown before any generation
   isPaid: boolean;
-  supports: { negativePrompt: boolean; seed: boolean };
+  // referenceImage: whether it can base an image on GenerateRequest.referenceImage. Unlike
+  // the others, a reference is never ignored: the router won't send one to a provider without support.
+  supports: { negativePrompt: boolean; seed: boolean; referenceImage: boolean; referenceStrength: boolean };
   estimateCostUsd(req: GenerateRequest): number;
   healthCheck(): Promise<{ ok: boolean; detail?: string }>;
   // Maps aspectRatio to the nearest size the provider supports.

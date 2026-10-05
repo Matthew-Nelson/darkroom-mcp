@@ -74,6 +74,13 @@ export class Router {
         if (!PAID_PROVIDERS.has(name)) freePassed ??= { name, how: "was skipped" };
         continue;
       }
+      // A reference can't be dropped the way an unsupported seed is: the image would ignore it.
+      if (req.referenceImage && !provider.supports.referenceImage) {
+        if (opts.provider) throw new NoProviderError(this.cantUseReference(name), []);
+        skipped.push({ provider: name, reason: "can't use a reference image" });
+        if (!provider.isPaid) freePassed ??= { name, how: "was skipped" };
+        continue;
+      }
       if (provider.isPaid && freePassed && !this.config.allowPaidFallback) {
         skipped.push({
           provider: name,
@@ -153,6 +160,26 @@ export class Router {
     const health = await provider.healthCheck().catch((err: unknown) => ({ ok: false, detail: errorMessage(err) }));
     if (health.ok) this.healthyUntil.set(name, Date.now() + HEALTH_CACHE_MS);
     return health;
+  }
+
+  private cantUseReference(name: ProviderName): string {
+    const order = this.config.providerOrder;
+    const able = order.filter((n) => this.providers.get(n)?.supports.referenceImage);
+    const cant = `Provider "${name}" can't use a reference image.`;
+    if (able.length === 0) return `${cant} No enabled provider can, so drop reference_image.`;
+    // Leaving out provider only helps if the walk can get to one of them: a free one, or a
+    // paid one the gate lets through (no free provider ahead of it, or paid fallback on).
+    const reachable = able.some(
+      (n) =>
+        !PAID_PROVIDERS.has(n) ||
+        this.config.allowPaidFallback ||
+        !order.slice(0, order.indexOf(n)).some((before) => !PAID_PROVIDERS.has(before)),
+    );
+    const next = reachable
+      ? "Name one, leave out provider to use the configured order, or drop reference_image."
+      : "Name one to use it, or drop reference_image. Leaving out provider won't reach a paid provider after a free one " +
+        "unless DARKROOM_ALLOW_PAID_FALLBACK=true.";
+    return `${cant} Enabled providers that can: ${able.join(", ")}. ${next}`;
   }
 
   private async closeFailed(reservation: Reservation, err: unknown): Promise<void> {

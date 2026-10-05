@@ -11,6 +11,8 @@ import {
   type GenerateRequest,
   type ProgressListener,
 } from "../providers/types.js";
+import { nearestAspectRatio } from "../providers/sizes.js";
+import { loadReferenceImage, ReferenceImageError, type LoadedReference } from "../reference-image.js";
 import { NoProviderError, type Router } from "../router.js";
 import { makePreview, rescuePng, type SavedImage, type Storage } from "../storage.js";
 
@@ -22,6 +24,8 @@ const DESCRIPTION = `Generate an image from a text prompt, save it as a PNG with
 Use this when the user wants an image: an illustration, icon, photo, mockup, diagram-style picture, and so on. Look at the returned preview and refine the prompt if it misses what the user asked for. Once an image is going into a page, app, or document, write its alt text with save_alt_text.
 
 By default this runs on a free local model. Local generation is slow (minutes, not seconds: about 1.5 minutes for "draft", 3 to 4 minutes for "final"), so iterate with quality "draft" and render "final" only once the composition is right, passing the draft's seed. With the default local model a new seed gives nearly the same picture, so to explore variations, reword the prompt instead of changing the seed.
+
+To base the image on an existing one (edit a photo, restyle a logo, vary an earlier result), pass its path as "reference_image". Describe the whole image you want, including what to keep from the reference, not only the change: the default local model re-renders the reference rather than editing it in place, keeping its composition and colors, while paid providers follow edit instructions closely. The output matches the reference's shape unless you pass aspect_ratio. With the local model, reference_strength sets how far the result may move from the reference: about 0.5 for photos and variations, about 0.7 to restyle flat graphics such as logos and icons (lower values nearly copy them), 0.8 or more for something only loosely based on it. Plain backgrounds tend to survive any strength that keeps the subject.
 
 Only pass "provider" when the user explicitly asks for a specific provider, because some providers cost money. Otherwise leave it out and the configured default is used. If a provider is unavailable or fails, the next one in the configured order is tried; tell the user when skipped_providers is not empty.`;
 
@@ -37,7 +41,12 @@ const inputSchema = {
     .max(MAX_PROMPT_LENGTH)
     .optional()
     .describe("Things to avoid. Ignored by providers that don't support it (reported in ignored_params)."),
-  aspect_ratio: z.enum(ASPECT_RATIOS).default("1:1").describe("Output shape. The result reports the actual pixel size."),
+  aspect_ratio: z
+    .enum(ASPECT_RATIOS)
+    .optional()
+    .describe(
+      "Output shape; defaults to 1:1, or with a reference_image to the closest shape to it. The result reports the actual pixel size.",
+    ),
   quality: z
     .enum(QUALITIES)
     .default("draft")
@@ -60,6 +69,23 @@ const inputSchema = {
     .max(200)
     .optional()
     .describe("Base name for the saved file. It is sanitized and a unique suffix is always added."),
+  reference_image: z
+    .string()
+    .trim()
+    .min(1)
+    .max(4096)
+    .optional()
+    .describe(
+      "An image to base the result on: the absolute path of any local PNG, JPEG, or WebP, or the filename of an earlier Darkroom image. Providers that can't use one are skipped.",
+    ),
+  reference_strength: z
+    .number()
+    .min(0.1)
+    .max(1)
+    .optional()
+    .describe(
+      "With reference_image: how far the result may move from it, 0.1 (nearly a copy) to 1 (ignores it). Default 0.5. Used by the local model; paid providers edit from the prompt instead and ignore it (reported in ignored_params).",
+    ),
 };
 
 const outputSchema = {
@@ -74,6 +100,7 @@ const outputSchema = {
   cost_usd: z.number(),
   cost_is_estimate: z.boolean().describe("true when the provider did not report an actual cost"),
   ignored_params: z.array(z.string()).describe("Parameters the provider could not honor"),
+  reference_image: z.string().nullable().describe("Absolute path of the reference image used, or null"),
   skipped_providers: z
     .array(z.object({ provider: z.string(), reason: z.string() }))
     .describe("Providers passed over before the one that served the request, and why"),
@@ -92,12 +119,24 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     async (args, extra): Promise<CallToolResult> => {
+      let reference: LoadedReference | undefined;
+      if (args.reference_image !== undefined) {
+        try {
+          reference = await loadReferenceImage(args.reference_image, deps.storage);
+        } catch (err) {
+          return errorResult(err);
+        }
+      }
+      const aspectRatio =
+        args.aspect_ratio ?? (reference ? nearestAspectRatio(reference.originalWidth, reference.originalHeight) : "1:1");
       const req: GenerateRequest = {
         prompt: args.prompt,
-        aspectRatio: args.aspect_ratio,
+        aspectRatio,
         quality: args.quality,
         ...(args.negative_prompt !== undefined && { negativePrompt: args.negative_prompt }),
         ...(args.seed !== undefined && { seed: args.seed }),
+        ...(reference && { referenceImage: reference.image }),
+        ...(reference && args.reference_strength !== undefined && { referenceStrength: args.reference_strength }),
       };
 
       const started = performance.now();
@@ -113,6 +152,10 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
         const ignored: string[] = [];
         if (args.negative_prompt !== undefined && !provider.supports.negativePrompt) ignored.push("negative_prompt");
         if (args.seed !== undefined && !provider.supports.seed) ignored.push("seed");
+        // Also ignored without a reference, since there's nothing for it to apply to.
+        if (args.reference_strength !== undefined && !(reference && provider.supports.referenceStrength)) {
+          ignored.push("reference_strength");
+        }
 
         const costUsd = result.actualCostUsd ?? provider.estimateCostUsd(req);
         const facts = {
@@ -125,6 +168,7 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
           cost_usd: costUsd,
           cost_is_estimate: result.actualCostUsd === undefined,
           ignored_params: ignored,
+          reference_image: reference?.path ?? null,
           skipped_providers: skipped,
         };
         const name = args.filename ?? args.prompt;
@@ -133,8 +177,17 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
           saved = await deps.storage.save(name, result.png, {
             version: 1,
             created_at: new Date().toISOString(),
-            request: args,
+            // The aspect ratio actually used, which a reference can choose.
+            request: { ...args, aspect_ratio: aspectRatio },
             ...facts,
+            ...(reference && {
+              reference: {
+                sha256: reference.sha256,
+                format: reference.format,
+                width: reference.originalWidth,
+                height: reference.originalHeight,
+              },
+            }),
           });
         } catch (err) {
           // The image may have been paid for: never drop it on the floor.
@@ -157,7 +210,7 @@ export function registerGenerateImage(server: McpServer, deps: { router: Router;
           structuredContent: output,
         };
       } catch (err) {
-        return errorResult(err);
+        return errorResult(err, { reference: reference !== undefined });
       } finally {
         progress?.stop();
       }
@@ -235,15 +288,23 @@ function summarize(o: Output): string {
     `Saved ${o.path}`,
     `${o.provider} (${o.model}), ${o.width}×${o.height}, seed ${o.seed ?? "n/a"}, ${(o.latency_ms / 1000).toFixed(1)}s, ${cost}. The image above is a preview.`,
   ];
+  if (o.reference_image !== null) lines.push(`Based on the reference image ${o.reference_image}.`);
   if (o.ignored_params.length > 0) lines.push(`Ignored by this provider: ${o.ignored_params.join(", ")}.`);
   for (const s of o.skipped_providers) lines.push(`Skipped ${s.provider}: ${s.reason}.`);
   return lines.join("\n");
 }
 
-function errorResult(err: unknown): CallToolResult {
+export function errorResult(err: unknown, opts: { reference?: boolean } = {}): CallToolResult {
   let text: string;
-  if (err instanceof ContentRefusedError) {
+  if (err instanceof ContentRefusedError && opts.reference) {
+    // Moderation and safety checks look at the image too, so it may be what was refused.
+    text =
+      `The provider refused this prompt or its reference image: ${err.message}. ` +
+      "Rephrase the request or try a different image; Darkroom does not retry refused requests on another provider.";
+  } else if (err instanceof ContentRefusedError) {
     text = `The provider refused this prompt: ${err.message}. Rephrase the request; Darkroom does not retry refused prompts on another provider.`;
+  } else if (err instanceof ReferenceImageError) {
+    text = `Couldn't use the reference image: ${err.message}`;
   } else if (err instanceof NoProviderError) {
     text = err.message;
   } else {

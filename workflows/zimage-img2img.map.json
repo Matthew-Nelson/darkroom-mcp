@@ -2,12 +2,13 @@
   "model": "z-image-turbo-q4_k_m",
   "seedVariety": "low",
   "sizeMultiple": 16,
-  "img2img": "zimage-img2img",
   "inputs": {
     "prompt": { "node": "pos", "input": "text" },
     "seed": { "node": "sample", "input": "seed" },
-    "width": { "node": "latent", "input": "width" },
-    "height": { "node": "latent", "input": "height" }
+    "width": { "node": "scale", "input": "width" },
+    "height": { "node": "scale", "input": "height" },
+    "referenceImage": { "node": "reference", "input": "image" },
+    "denoise": { "node": "sample", "input": "denoise" }
   },
   "output": { "node": "output" },
   "models": [

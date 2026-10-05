@@ -1,4 +1,4 @@
-import type { AspectRatio, Quality } from "./types.js";
+import { ASPECT_RATIOS, type AspectRatio, type Quality } from "./types.js";
 
 const RATIOS: Record<AspectRatio, [number, number]> = {
   "1:1": [1, 1],
@@ -32,4 +32,14 @@ export function sizeForArea(
 
 export function sizeForQuality(aspectRatio: AspectRatio, quality: Quality, multiple = 16): { width: number; height: number } {
   return sizeForArea(aspectRatio, QUALITY_PIXELS[quality], multiple);
+}
+
+/** The supported aspect ratio closest to a width and height, compared on a log scale so 2:1 and 1:2 are equally far from 1:1. */
+export function nearestAspectRatio(width: number, height: number): AspectRatio {
+  const target = Math.log(width / height);
+  const distance = (r: AspectRatio) => {
+    const [w, h] = RATIOS[r];
+    return Math.abs(Math.log(w / h) - target);
+  };
+  return ASPECT_RATIOS.reduce((best, r) => (distance(r) < distance(best) ? r : best));
 }

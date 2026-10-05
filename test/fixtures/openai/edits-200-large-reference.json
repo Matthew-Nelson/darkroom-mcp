@@ -1,0 +1,24 @@
+{
+  "background": "opaque",
+  "data": [
+    {
+      "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAD0lEQVQImWNowAEYhpYEAILzYAEeEbvlAAAAAElFTkSuQmCC"
+    }
+  ],
+  "output_format": "png",
+  "quality": "low",
+  "size": "992x672",
+  "usage": {
+    "input_tokens": 1520,
+    "input_tokens_details": {
+      "image_tokens": 1457,
+      "text_tokens": 63
+    },
+    "output_tokens": 118,
+    "output_tokens_details": {
+      "image_tokens": 118,
+      "text_tokens": 0
+    },
+    "total_tokens": 1638
+  }
+}

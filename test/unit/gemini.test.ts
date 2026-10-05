@@ -61,7 +61,7 @@ describe("gemini provider", () => {
     expect(p.name).toBe("gemini");
     expect(p.model).toBe("gemini-3.1-flash-image");
     expect(p.isPaid).toBe(true);
-    expect(p.supports).toEqual({ negativePrompt: false, seed: true });
+    expect(p.supports).toEqual({ negativePrompt: false, seed: true, referenceImage: true, referenceStrength: false });
     const draft = p.estimateCostUsd(request);
     const final = p.estimateCostUsd({ ...request, quality: "final" });
     expect(final).toBeGreaterThan(draft);
@@ -135,6 +135,35 @@ describe("gemini provider", () => {
         imageConfig: { aspectRatio: "3:2", imageSize: "512" },
       },
     });
+  });
+
+  it("sends a reference image as an inline PNG part after the prompt", async () => {
+    const { fetch, calls } = fakeFetch(reply("generate-200-draft.json"));
+    const png = await sharp({ create: { width: 96, height: 64, channels: 3, background: "#123456" } }).png().toBuffer();
+    await provider(fetch).generate({ ...request, referenceImage: { png, width: 96, height: 64 } }, signal);
+    expect(calls[0]?.body.contents).toEqual([
+      {
+        role: "user",
+        parts: [{ text: request.prompt }, { inlineData: { mimeType: "image/png", data: png.toString("base64") } }],
+      },
+    ]);
+  });
+
+  it("adds the reference's input tokens to the estimate", () => {
+    const p = provider(fakeFetch(reply("generate-200-draft.json")).fetch);
+    const referenceImage = { png: Buffer.from("png"), width: 2048, height: 1536 };
+    const extra = p.estimateCostUsd({ ...request, referenceImage }) - p.estimateCostUsd(request);
+    expect(extra).toBeGreaterThan((258 * 0.5) / 1e6); // measured: 258 input tokens per reference
+    expect(extra).toBeLessThan(0.001);
+  });
+
+  it("estimates at least the recorded real cost of a request with a reference", async () => {
+    const p = provider(fakeFetch(reply("generate-200-reference.json")).fetch);
+    const referenceImage = { png: Buffer.from("png"), width: 1248, height: 832 };
+    const req = { prompt: "x".repeat(196), aspectRatio: "3:2", quality: "draft", referenceImage } as const;
+    const actual = (await p.generate(req, signal)).actualCostUsd ?? 0;
+    expect(actual).toBe(0.046041);
+    expect(p.estimateCostUsd(req)).toBeGreaterThanOrEqual(actual);
   });
 
   it("picks a random 32-bit seed when none is given, sends it, and returns it", async () => {

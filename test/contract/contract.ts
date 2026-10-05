@@ -8,6 +8,8 @@ import { ASPECT_RATIOS, QUALITIES, type GenerateRequest, type ImageProvider } fr
 
 export interface ContractOptions {
   cases: GenerateRequest[];
+  // Run with a reference image (one cheap draft for real providers), if the provider supports one.
+  referenceCase?: GenerateRequest | undefined;
   timeoutMs?: number;
 }
 
@@ -20,9 +22,8 @@ export function providerContract(label: string, make: () => ImageProvider | Prom
       expect(PROVIDER_NAMES).toContain(p.name);
       expect(p.model).toMatch(/\S/);
       expect(p.isPaid).toBe(PAID_PROVIDERS.has(p.name as ProviderName));
-      expect(Object.keys(p.supports).sort()).toEqual(["negativePrompt", "seed"]);
-      expect(typeof p.supports.negativePrompt).toBe("boolean");
-      expect(typeof p.supports.seed).toBe("boolean");
+      expect(Object.keys(p.supports).sort()).toEqual(["negativePrompt", "referenceImage", "referenceStrength", "seed"]);
+      for (const value of Object.values(p.supports)) expect(typeof value).toBe("boolean");
     });
 
     it("estimates cost for every shape: zero when free, above zero when paid", async () => {
@@ -47,6 +48,27 @@ export function providerContract(label: string, make: () => ImageProvider | Prom
       const p = await make();
       await expect(p.generate(opts.cases[0] ?? { prompt: "x", aspectRatio: "1:1", quality: "draft" }, AbortSignal.abort())).rejects.toThrow();
     });
+
+    const ref = opts.referenceCase;
+    if (ref) {
+      it(
+        `generates a ${ref.aspectRatio} ${ref.quality} PNG from a reference image, if it can use one`,
+        async () => {
+          const p = await make();
+          if (!p.supports.referenceImage) return;
+          const withRef = { ...ref, referenceImage: await referenceImage() };
+          expect(p.estimateCostUsd(withRef)).toBeGreaterThanOrEqual(p.estimateCostUsd(ref));
+          const result = await p.generate(withRef, new AbortController().signal);
+          const meta = await sharp(result.png).metadata();
+          expect(meta.format).toBe("png");
+          expect([meta.width, meta.height]).toEqual([result.width, result.height]);
+          const [w, h] = ref.aspectRatio.split(":").map(Number) as [number, number];
+          expect(Math.abs(result.width / result.height / (w / h) - 1)).toBeLessThan(0.05);
+          if (!p.isPaid) expect(result.actualCostUsd ?? 0).toBe(0);
+        },
+        timeout,
+      );
+    }
 
     for (const req of opts.cases) {
       it(
@@ -93,3 +115,17 @@ export const ALL_SHAPES: GenerateRequest[] = ASPECT_RATIOS.flatMap((aspectRatio,
 export const ONE_DRAFT: GenerateRequest[] = [
   { prompt: "a ceramic mug on a wooden desk that says DARKROOM", aspectRatio: "1:1", quality: "draft", seed: 42 },
 ];
+
+/** A simple scene to base an image on: sky, a yellow sun, and green ground, 768×512. */
+export async function referenceImage(): Promise<{ png: Buffer; width: number; height: number }> {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="768" height="512">
+  <rect width="768" height="512" fill="#87ceeb"/><circle cx="384" cy="200" r="90" fill="#ffcc00"/>
+  <rect y="340" width="768" height="172" fill="#2e8b57"/></svg>`;
+  return { png: await sharp(Buffer.from(svg)).png().toBuffer(), width: 768, height: 512 };
+}
+
+export const REFERENCE_DRAFT: GenerateRequest = {
+  prompt: "the same simple landscape, turned into a watercolor painting at sunset",
+  aspectRatio: "3:2",
+  quality: "draft",
+};

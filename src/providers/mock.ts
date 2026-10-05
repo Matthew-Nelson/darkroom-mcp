@@ -6,7 +6,8 @@ import type { GenerateRequest, GenerateResult, ImageProvider, ProgressListener }
 const MODEL = "mock-placeholder-v1";
 
 /**
- * Draws the prompt and seed on a background whose color comes from the seed.
+ * Draws the prompt and seed on a background whose color comes from the seed, or on
+ * the reference image (cropped to fill, and darkened so the text stays readable).
  * No network, no GPU, no cost: for tests, CI, and demos.
  */
 export function createMockProvider(): ImageProvider {
@@ -14,7 +15,7 @@ export function createMockProvider(): ImageProvider {
     name: "mock",
     model: MODEL,
     isPaid: false,
-    supports: { negativePrompt: false, seed: true },
+    supports: { negativePrompt: false, seed: true, referenceImage: true, referenceStrength: false },
     estimateCostUsd: () => 0,
     healthCheck: () => Promise.resolve({ ok: true }),
     async generate(req: GenerateRequest, signal: AbortSignal, onProgress?: ProgressListener): Promise<GenerateResult> {
@@ -22,15 +23,24 @@ export function createMockProvider(): ImageProvider {
       onProgress?.({ message: "Drawing placeholder" });
       const seed = req.seed ?? randomInt(0, 2 ** 32);
       const { width, height } = sizeForQuality(req.aspectRatio, req.quality);
-      const svg = placeholderSvg({ width, height, seed, prompt: req.prompt });
-      const png = await sharp(Buffer.from(svg)).png().toBuffer();
+      const reference = req.referenceImage !== undefined;
+      const svg = Buffer.from(placeholderSvg({ width, height, seed, prompt: req.prompt, reference }));
+      const png = req.referenceImage
+        ? await sharp(req.referenceImage.png)
+            .resize(width, height, { fit: "cover" })
+            .flatten({ background: seedColor(seed) })
+            .composite([{ input: svg }])
+            .removeAlpha() // the text overlay brings an alpha channel with it
+            .png()
+            .toBuffer()
+        : await sharp(svg).png().toBuffer();
       signal.throwIfAborted();
       return { png, model: MODEL, width, height, seed, actualCostUsd: 0 };
     },
   };
 }
 
-function placeholderSvg(o: { width: number; height: number; seed: number; prompt: string }): string {
+function placeholderSvg(o: { width: number; height: number; seed: number; prompt: string; reference: boolean }): string {
   const { width, height, seed } = o;
   const fontSize = Math.round(Math.min(width, height) / 20);
   const margin = Math.round(fontSize * 1.5);
@@ -39,13 +49,17 @@ function placeholderSvg(o: { width: number; height: number; seed: number; prompt
   const charsPerLine = Math.max(8, Math.floor((width - 2 * margin) / (fontSize * 0.55)));
   const maxLines = Math.max(1, Math.floor((height - 3 * margin - lineHeight) / lineHeight));
   const lines = wrap(o.prompt, charsPerLine, maxLines);
-  const footer = `mock · seed ${seed} · ${width}×${height}`;
+  const footer = `mock · seed ${seed} · ${width}×${height}${o.reference ? " · from reference" : ""}`;
 
+  // Over a reference, a dark veil instead of a solid background keeps the text readable.
+  const background = o.reference
+    ? `<rect width="100%" height="100%" fill="#000000" fill-opacity="0.55"/>`
+    : `<rect width="100%" height="100%" fill="${seedColor(seed)}"/>`;
   const text = lines
     .map((line, i) => `<text x="${margin}" y="${margin + fontSize + i * lineHeight}">${escapeXml(line)}</text>`)
     .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-  <rect width="100%" height="100%" fill="${seedColor(seed)}"/>
+  ${background}
   <g font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="${fontSize}" fill="#ffffff">${text}</g>
   <text x="${margin}" y="${height - margin}" font-family="Menlo, DejaVu Sans Mono, monospace"
     font-size="${Math.round(fontSize * 0.75)}" fill="#ffffff" fill-opacity="0.75">${escapeXml(footer)}</text>

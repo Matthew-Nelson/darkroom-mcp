@@ -4,7 +4,7 @@ An MCP server that gives Claude Code an image generation tool. Claude writes the
 
 Providers are swappable: a free local model (Z-Image Turbo via ComfyUI) by default, OpenAI or Gemini as opt-in paid options, and a `mock` provider for tests and demos.
 
-> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` and `gemini` providers work, with fallback between them, a daily spend cap, and five tools: three for generating and finding images, plus alt text and a WCAG contrast check for images headed into a page. It isn't published to npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
+> **Status:** v0.1.0. The `mock`, local `comfyui`, and paid `openai` and `gemini` providers work, with fallback between them, a daily spend cap, and five tools: three for generating and finding images, plus alt text and a WCAG contrast check for images headed into a page. Any provider can base an image on a reference image. It isn't published to npm; install it from source or from a packed tarball (below). See [`SPEC.md`](SPEC.md) for the design.
 
 ## How it works
 
@@ -78,7 +78,7 @@ Before each request Darkroom checks that ComfyUI is reachable and that every nod
 
 **Timeouts and progress:** while ComfyUI works, Darkroom sends MCP progress notifications (sampler step, e.g. "Sampling step 3/8", plus a heartbeat every 5 seconds). Claude Code shows these for background tasks, and they reset its MCP idle timeout (30 minutes for stdio servers); its overall tool timeout defaults to about 28 hours, so local renders don't need any timeout changes. Darkroom's own limit is `COMFYUI_TIMEOUT_MS` (5 minutes, including time waiting in ComfyUI's queue). When a request times out or is cancelled, Darkroom removes its job from ComfyUI's queue, or interrupts it if it's running, so the GPU stops; it never interrupts another client's job.
 
-**Templates:** `workflows/zimage.json` is an ordinary ComfyUI API-format graph, and `zimage.map.json` tells Darkroom which node inputs take the prompt, seed, and size, which node produces the image, and which model files and custom nodes the health check should look for. Images come back through ComfyUI's temp folder, so the only permanent copy is the one in `DARKROOM_OUTPUT_DIR`.
+**Templates:** `workflows/zimage.json` is an ordinary ComfyUI API-format graph, and `zimage.map.json` tells Darkroom which node inputs take the prompt, seed, and size, which node produces the image, and which model files and custom nodes the health check should look for. Its `img2img` entry names the image-to-image companion, `zimage-img2img.json`, used when there's a reference image: it loads the reference, crops it to the requested size, and encodes it in place of the empty starting image, and its mapping says where the reference's filename and `reference_strength` go. Images come back through ComfyUI's temp folder, so the only permanent copy is the one in `DARKROOM_OUTPUT_DIR`.
 
 ## Paid generation (OpenAI, Gemini)
 
@@ -193,14 +193,54 @@ Darkroom calls Gemini's `generateContent` API, which Google recommends for stabl
 | `provider` | configured order | Only for when the user asks for a specific provider |
 | `seed` | random | Reuse a draft's seed to render it as `final` |
 | `filename` | from the prompt | Sanitized to a slug; a unique suffix is always added |
+| `reference_image` | none | An image to base the result on: the absolute path of any local PNG, JPEG, or WebP, or the filename of an earlier Darkroom image. See "Reference images" below |
+| `reference_strength` | `0.5` | 0.1 to 1: how far a local result may move from the reference. Paid providers ignore it (reported in `ignored_params`) |
 
-Returns a JPEG preview (at most 768px on the long edge) for Claude to see, a text summary, and structured content: the absolute file path, sidecar path, provider, model, actual size, seed, latency, cost in USD, ignored parameters, and any providers that were skipped and why.
+With a `reference_image` and no `aspect_ratio`, the output takes the reference's closest shape (a 4:3 photo comes out 3:2).
 
-Each image is saved as `<slug>-<id>.png` next to `<slug>-<id>.json`, which holds the full request and the result metadata. Files are never overwritten.
+Returns a JPEG preview (at most 768px on the long edge) for Claude to see, a text summary, and structured content: the absolute file path, sidecar path, provider, model, actual size, seed, latency, cost in USD, ignored parameters, the reference image used (or `null`), and any providers that were skipped and why.
+
+Each image is saved as `<slug>-<id>.png` next to `<slug>-<id>.json`, which holds the full request (with the aspect ratio actually used) and the result metadata, plus, for a reference image, its path and a `reference` block with the file's SHA-256, format, and original size. Files are never overwritten.
+
+### Reference images
+
+Pass `reference_image` to restyle a photo or logo, vary an earlier result, or turn a sketch into a finished picture. Darkroom reads the file once, before any provider sees it: anything that isn't a readable PNG, JPEG, or WebP (or is over 50MB, or under 64px on a side, including after the scale-down below) is refused before any network call; photos are turned upright by their EXIF orientation; metadata, including any GPS position, is dropped by re-encoding to PNG; and anything over 2048px on the long edge is scaled down.
+
+The providers use it differently:
+
+| Provider | How | Best for |
+| --- | --- | --- |
+| `comfyui` | Re-renders the reference: Z-Image starts from it instead of noise, keeping its layout and colors while the prompt steers style and content | Restyles (cartoon, watercolor, stained glass), variations, sketch to render. Free, about as slow as a normal render |
+| `openai`, `gemini` | Edits from instructions: the reference goes in beside the prompt | Precise edits ("make the mug blue"), and keeping a subject recognizable through a big style change |
+| `mock` | Draws the reference under its placeholder text | Tests |
+
+For the local model, describe the whole picture you want, not only the change, and pick `reference_strength` for the job:
+
+| Strength | What happens |
+| --- | --- |
+| `0.5` (default) | Photos keep their layout; the prompt shifts mood, lighting, and style. A flat logo comes back nearly unchanged |
+| `0.7` | Flat graphics such as logos and icons take on the style asked for, and their text survives |
+| `0.8` and up | Only loosely based on the reference; a photo becomes a new picture |
+
+Large plain areas, like a logo's white background, survive at any strength that keeps the subject, so "put this logo on navy fabric" is a job for a paid provider. Measured Oct 4, 2026: a fox café photo at 0.5, 0.65, and 0.8, and five restyles of a flat burrito logo at 0.5 and 0.7, all 3:2 drafts at about 100 seconds each.
+
+**A limitation of the local model:** it isn't an editing model. Z-Image draws from text, and image-to-image hands it a noised copy of the reference to redraw (the SDEdit approach), so it never reads the instruction against the picture. `reference_strength` is the only control, and it trades keeping the layout against changing the picture: low values keep the layout but barely move the style, and a value high enough for a big restyle moves the subject and the scene too. On Oct 5, 2026, a beach photo of two people restyled as classic hand-drawn animation at 0.7 came out in the asked-for style, but with the people larger and shifted left, the rocks rearranged, and the footprints rerouted; OpenAI, given the same prompt, kept the photo's layout. The M7 benchmark showed the same gap (a café kept bright when asked for night). For edits that must follow an instruction, or keep a photo's layout through a big style change, use a paid provider.
+
+What a reference costs, measured Oct 4, 2026 (M7 benchmark, a 1248×832 reference unless noted):
+
+| Provider | `draft` | `final` | Time | Notes |
+| --- | --- | --- | --- | --- |
+| `comfyui` | $0 | $0 | ~100 s (3:2 draft) | About as long as a normal render |
+| `openai` | $0.012 (3:2), $0.0135 (1:1) | $0.017 (3:2) | 10–14 s | The reference adds about 1,000 input tokens (~$0.008) at 1MP, 1,457 at 2048×1365 (~$0.012). It kept the scene almost exactly and changed only what was asked |
+| `gemini` | $0.046 | $0.068 | 8–11 s | The reference adds 258 input tokens (~$0.0001), so the price is the same as without one. One of its drafts mirrored the layout left to right |
+
+ComfyUI keeps a copy of each reference in its `input/darkroom/` folder, named by content so a reused reference is stored once. ComfyUI has no API for deleting inputs, so clear that folder by hand if you need to.
+
+A provider that can't use a reference is never sent one: in the provider order it's skipped (and, being skipped, a free one still keeps the paid gate closed), and asking for it by name is refused with the providers that can. Every built-in provider supports references; a ComfyUI template without an `img2img` companion doesn't.
 
 ### `list_providers`
 
-No inputs; read-only, and never generates or spends anything. Returns the configured order and whether paid fallback is on; for each provider (enabled ones first, in order): whether it's enabled and healthy, its model, whether it costs money, its estimated cost for a square `draft` and `final`, and a note saying why it can't be used, how to enable it, or that a paid provider behind a free one is only used when asked for by name. Also today's paid spend (including requests still running), the cap, and what's left, for the current UTC day. Health results come from the same 60-second cache the router uses.
+No inputs; read-only, and never generates or spends anything. Returns the configured order and whether paid fallback is on; for each provider (enabled ones first, in order): whether it's enabled and healthy, its model, whether it costs money, its estimated cost for a square `draft` and `final`, whether it can take a reference image, and a note saying why it can't be used, how to enable it, or that a paid provider behind a free one is only used when asked for by name. Also today's paid spend (including requests still running), the cap, and what's left, for the current UTC day. Health results come from the same 60-second cache the router uses.
 
 ### `list_images`
 

@@ -27,7 +27,7 @@ function fakeProvider(name: string, over: Partial<ImageProvider> = {}): ImagePro
     name,
     model: `${name}-model`,
     isPaid: false,
-    supports: { negativePrompt: false, seed: true },
+    supports: { negativePrompt: false, seed: true, referenceImage: false, referenceStrength: false },
     estimateCostUsd: () => 0,
     healthCheck: () => Promise.resolve({ ok: true }),
     generate: vi.fn(() =>
@@ -457,5 +457,91 @@ describe("Router paid gate", () => {
     }).generate(req, { signal });
     expect(routed.provider.name).toBe("mock");
     expect(routed.skipped[0]?.reason).toMatch(/^daily spend cap reached/);
+  });
+});
+
+describe("Router reference images", () => {
+  const withRef: GenerateRequest = { ...req, referenceImage: { png: Buffer.from("png"), width: 512, height: 512 } };
+  const canRef = (name: string, over: Partial<ImageProvider> = {}) =>
+    fakeProvider(name, { supports: { ...fakeProvider(name).supports, referenceImage: true }, ...over });
+
+  it("sends a reference to a provider that can use one", async () => {
+    const mock = canRef("mock");
+    const routed = await router("mock", { mock }).generate(withRef, { signal });
+    expect(routed.provider.name).toBe("mock");
+    expect(mock.generate).toHaveBeenCalledWith(withRef, signal, undefined);
+  });
+
+  it("skips a provider that can't use a reference, without a health check, and says why", async () => {
+    const healthCheck = vi.fn(() => Promise.resolve({ ok: true }));
+    const comfyui = fakeProvider("comfyui", { healthCheck });
+    const routed = await router("comfyui,mock", { comfyui, mock: canRef("mock") }).generate(withRef, { signal });
+    expect(routed.provider.name).toBe("mock");
+    expect(routed.skipped).toEqual([{ provider: "comfyui", reason: "can't use a reference image" }]);
+    expect(healthCheck).not.toHaveBeenCalled();
+    expect(comfyui.generate).not.toHaveBeenCalled();
+  });
+
+  it("still uses a provider without support when there's no reference", async () => {
+    const providers = { comfyui: fakeProvider("comfyui"), mock: canRef("mock") };
+    const routed = await router("comfyui,mock", providers).generate(req, { signal });
+    expect(routed.provider.name).toBe("comfyui");
+  });
+
+  it("doesn't step from a free provider that can't use a reference to a paid one by default", async () => {
+    const openai = paidProvider({ supports: { ...paidProvider().supports, referenceImage: true } });
+    const routing = router("comfyui,openai", { comfyui: fakeProvider("comfyui"), openai }).generate(withRef, { signal });
+    await expect(routing).rejects.toThrow(/comfyui: can't use a reference image; openai: not used because comfyui was skipped/);
+    expect(openai.generate).not.toHaveBeenCalled();
+    expect(await ledger.spentTodayUsd()).toBe(0);
+  });
+
+  it("steps to a paid provider that can use a reference with DARKROOM_ALLOW_PAID_FALLBACK=true", async () => {
+    const openai = paidProvider({ supports: { ...paidProvider().supports, referenceImage: true } });
+    const routed = await router("comfyui,openai", { comfyui: fakeProvider("comfyui"), openai }, {
+      DARKROOM_ALLOW_PAID_FALLBACK: "true",
+    }).generate(withRef, { signal });
+    expect(routed.provider.name).toBe("openai");
+  });
+
+  it("refuses an explicit provider that can't use a reference, naming the ones that can", async () => {
+    const comfyui = fakeProvider("comfyui");
+    const err = await router("comfyui,mock,openai", { comfyui, mock: canRef("mock"), openai: paidProvider() })
+      .generate(withRef, { provider: "comfyui", signal })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NoProviderError);
+    expect((err as Error).message).toBe(
+      'Provider "comfyui" can\'t use a reference image. Enabled providers that can: mock. ' +
+        "Name one, leave out provider to use the configured order, or drop reference_image.",
+    );
+    expect(comfyui.generate).not.toHaveBeenCalled();
+  });
+
+  it("doesn't suggest the configured order when the paid gate would stop it", async () => {
+    const openai = paidProvider({ supports: { ...paidProvider().supports, referenceImage: true } });
+    const routing = router("comfyui,openai", { comfyui: fakeProvider("comfyui"), openai });
+    const message = (await routing.generate(withRef, { provider: "comfyui", signal }).catch((e: unknown) => e)) as Error;
+    expect(message.message).toBe(
+      'Provider "comfyui" can\'t use a reference image. Enabled providers that can: openai. ' +
+        "Name one to use it, or drop reference_image. Leaving out provider won't reach a paid provider after " +
+        "a free one unless DARKROOM_ALLOW_PAID_FALLBACK=true.",
+    );
+    // The advice holds: leaving out provider is refused.
+    await expect(routing.generate(withRef, { signal })).rejects.toThrow(NoProviderError);
+  });
+
+  it("suggests the configured order for a paid provider when paid fallback is on, or nothing free comes first", async () => {
+    const openai = paidProvider({ supports: { ...paidProvider().supports, referenceImage: true } });
+    const comfyui = fakeProvider("comfyui");
+    const allowed = router("comfyui,openai", { comfyui, openai }, { DARKROOM_ALLOW_PAID_FALLBACK: "true" });
+    await expect(allowed.generate(withRef, { provider: "comfyui", signal })).rejects.toThrow(/leave out provider/);
+    const paidFirst = router("openai,comfyui", { comfyui, openai });
+    await expect(paidFirst.generate(withRef, { provider: "comfyui", signal })).rejects.toThrow(/leave out provider/);
+  });
+
+  it("says so when no enabled provider can use a reference", async () => {
+    await expect(
+      router("comfyui", { comfyui: fakeProvider("comfyui") }).generate(withRef, { provider: "comfyui", signal }),
+    ).rejects.toThrow(/can't use a reference image\. No enabled provider can/);
   });
 });

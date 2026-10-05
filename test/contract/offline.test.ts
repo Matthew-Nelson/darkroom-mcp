@@ -2,16 +2,19 @@ import sharp from "sharp";
 import { createGeminiProvider } from "../../src/providers/gemini.js";
 import { createMockProvider } from "../../src/providers/mock.js";
 import { createOpenAIProvider } from "../../src/providers/openai.js";
-import { ALL_SHAPES, providerContract } from "./contract.js";
+import { ALL_SHAPES, providerContract, REFERENCE_DRAFT } from "./contract.js";
 
 // Runs in every `npm test`: no network, no GPU, no keys.
 
-providerContract("mock", () => createMockProvider(), { cases: ALL_SHAPES });
+providerContract("mock", () => createMockProvider(), { cases: ALL_SHAPES, referenceCase: REFERENCE_DRAFT });
 
-/** Answers like the Images API, with a blank PNG at the requested size. */
+/** Answers like the Images API (generations as JSON, edits as multipart), with a blank PNG at the requested size. */
 const fakeImagesApi: typeof fetch = async (_input, init) => {
-  const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}") as { size?: string };
-  const [width = 0, height = 0] = (body.size ?? "").split("x").map(Number);
+  const size =
+    init?.body instanceof FormData
+      ? init.body.get("size")
+      : (JSON.parse(typeof init?.body === "string" ? init.body : "{}") as { size?: string }).size;
+  const [width = 0, height = 0] = (typeof size === "string" ? size : "").split("x").map(Number);
   const png = await sharp({ create: { width, height, channels: 3, background: "#808080" } }).png().toBuffer();
   return Response.json({
     data: [{ b64_json: png.toString("base64") }],
@@ -23,7 +26,7 @@ providerContract(
   "openai (fake API)",
   () =>
     createOpenAIProvider({ apiKey: "sk-test-not-a-real-key", model: "gpt-image-2.5-flare", timeoutMs: 10_000, fetch: fakeImagesApi }),
-  { cases: ALL_SHAPES },
+  { cases: ALL_SHAPES, referenceCase: REFERENCE_DRAFT },
 );
 
 // Gemini picks sizes from the aspect ratio and tier: these are the 1K sizes seen in the M5
@@ -69,5 +72,5 @@ providerContract(
       timeoutMs: 10_000,
       fetch: fakeGenerateContent,
     }),
-  { cases: ALL_SHAPES },
+  { cases: ALL_SHAPES, referenceCase: REFERENCE_DRAFT },
 );
