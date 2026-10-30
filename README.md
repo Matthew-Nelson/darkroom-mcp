@@ -320,6 +320,8 @@ All configuration comes from environment variables, validated at startup. The se
 
 ## Development
 
+Run `nvm use` first: `.nvmrc` pins development to Node 24, whose npm 11 writes `package-lock.json` the same way Dependabot does (npm 10, bundled with Node 22, strips sharp's `libc` fields). Darkroom itself still runs on any Node 22.12 or newer.
+
 ```sh
 npm run check   # typecheck + lint + tests (mock only: no GPU, network, or keys)
 npm run build   # compile to dist/
