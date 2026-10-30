@@ -15,6 +15,7 @@
 | Fix: ComfyUI cancel path (M1 review Lows) | done | — |
 | M6: Accessibility metadata | done | `m6` |
 | M7: Image-to-image and editing | done | `m7` |
+| Chore: FLUX.2 [klein] 4B benchmark (SPEC.md) | awaiting review | — |
 | Later: GitHub release | not scheduled | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).

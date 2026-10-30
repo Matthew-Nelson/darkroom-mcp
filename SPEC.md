@@ -205,11 +205,11 @@ Z-Image Turbo at smaller sizes (measured in an earlier round with less free memo
 - Background disk and network activity (model downloads) slowed Flux by about 30% in the first round. The eval should run on an otherwise idle machine.
 - **Z-Image Turbo barely varies by seed.** Seeds 42 and 7 produced nearly the same mug, angle, and window; Flux and SDXL varied far more. For Z-Image, changing the seed is not a useful way to explore; changing the prompt is. The tool description says so, and `list_providers` can expose a per-template `seedVariety: low | high` hint.
 - The 512px draft kept the composition and lettering of the 1024px render, which supports the draft → final workflow.
-- Comparison sheet and full-size images: `~/ComfyUI/output/darkroom_spike/` (outside the repo). Re-run with `scripts/bench-comfyui.py`.
+- Comparison sheet and full-size images: `~/ComfyUI/output/darkroom_spike/` (outside the repo). Re-run the Z-Image part with `scripts/bench-comfyui.py` (its SDXL and Flux schnell graphs were removed on Oct 30, 2026, since their model files are gone; they're in git history).
 
 **Not yet tried:** Z-Image Q8_0 GGUF (7.2GB). It may be faster per step because Q8 is cheaper to unpack, but it could push peak memory toward 14GB.
 
-**Model files used** (all ungated, in `~/ComfyUI/models/`; only the first three are needed now, the rest were for the spike):
+**Model files used** (all ungated, in `~/ComfyUI/models/`; only the first three are needed now; the rest were for the spike and have since been deleted):
 
 | Folder | File | Source |
 | --- | --- | --- |
@@ -219,6 +219,39 @@ Z-Image Turbo at smaller sizes (measured in an earlier round with less free memo
 | `unet/` | `flux1-schnell-Q4_K_S.gguf` | `huggingface.co/city96/FLUX.1-schnell-gguf` |
 | `clip/` | `t5-v1_1-xxl-encoder-Q4_K_M.gguf`, `clip_l.safetensors` | `huggingface.co/city96/t5-v1_1-xxl-encoder-gguf`, `huggingface.co/comfyanonymous/flux_text_encoders` |
 | `checkpoints/` | `sd_xl_base_1.0.safetensors` | `huggingface.co/stabilityai/stable-diffusion-xl-base-1.0` |
+
+## FLUX.2 [klein] 4B benchmark (Oct 30, 2026)
+
+A read-only survey of newer local models found one worth trying on 16GB: FLUX.2 [klein] 4B, the distilled 4B model from Black Forest Labs (Apache 2.0, 4 steps, text-to-image and reference editing in one model). Its 9B sibling is non-commercial; FLUX 3 Image Klein (5.6B, Oct 15, 2026) needs a commercial license for product use; Qwen-Image 2.1 is research-only (per third-party reports; we didn't read its license). Z-Image-Edit is still unreleased. We benchmarked klein against Z-Image Turbo with `scripts/bench-comfyui.py`.
+
+**Setup:** same machine and ComfyUI install as the spike, with 79–81% of memory free at the start. Both models at Q4_K_M, each on a freshly started server, seeds 42 and 7, 1024px (`final`) then 512px (`draft`). The klein graph follows ComfyUI's bundled klein text-to-image template (euler, `Flux2Scheduler`, CFG 1). Prompt: a hand-painted wooden sign outside a bakery at dusk, light rain on the cobblestones, warm window light, the sign reads "OPEN LATE" in gold serif letters.
+
+| | FLUX.2 [klein] 4B (Q4_K_M) | Z-Image Turbo (Q4_K_M) |
+| --- | --- | --- |
+| Steps | 4 | 8 |
+| 1024×1024, seed 42 / 7 (the first run of each includes model load) | 83s / 70s | 225s / 223s |
+| 512×512, seed 42 / 7 | 30s / 29s | 93s / 80s |
+| Peak memory (ComfyUI process) | ~8–8.5GB | ~11GB |
+| Spelled "OPEN LATE" | 3/4 (the 512 seed 42 main sign read "PPEN"; a second sign in the same image was right) | 4/4 (one 1024 image had a garbled sign in the background) |
+| Varies by seed | Yes, a different composition per seed | Barely, as in the spike |
+| 512 draft keeps the 1024 composition | No | Yes |
+| Model files on disk | 2.9GB new (transformer and VAE; text encoder shared) | 7.8GB |
+
+**Findings:**
+
+- Klein is about 3× faster at both sizes and peaks about 2.5GB lower. Z-Image's times match the spike's, so the comparison holds.
+- Klein's text encoder has Qwen3-4B's architecture (ComfyUI loads it as `qwen3_4b`), and Z-Image's `Qwen3-4B-Q4_K_M.gguf` loaded and worked for it with loader type `flux2`.
+- Klein's 1024 images looked best of the set (more dusk, wet cobblestones, bread in the window); Z-Image's lettering was more reliable.
+- Klein's draft at 512 doesn't preview its final at 1024: the same seed at a different size gives a different picture. That breaks the draft → final workflow the `quality` tiers assume. In exchange, its seed is a useful way to explore, which Z-Image's isn't.
+- One prompt and eight images is too thin to change the default. Next, if wanted: the 20-prompt eval (`eval/`) on klein, and klein's native reference editing against the M7 image-to-image template. Adding it would be a new template and mapping file.
+- Images: `~/ComfyUI/output/darkroom_bench_2026-10-30/` (outside the repo).
+
+**Model files added** (ungated, in `~/ComfyUI/models/`, SHA-256 checked against Hugging Face):
+
+| Folder | File | Source |
+| --- | --- | --- |
+| `unet/` | `flux-2-klein-4b-Q4_K_M.gguf` (2.6GB) | `huggingface.co/unsloth/FLUX.2-klein-4B-GGUF` |
+| `vae/` | `flux2-vae.safetensors` (0.34GB) | `huggingface.co/Comfy-Org/Flux-2-Klein-4B`, `split_files/vae/` |
 
 ## Milestones and acceptance criteria
 
