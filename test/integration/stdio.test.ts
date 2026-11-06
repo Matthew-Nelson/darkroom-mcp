@@ -338,6 +338,25 @@ describe("darkroom over stdio", () => {
     expect(filtered.structuredContent).toEqual({ images: [], total: 0, unreadable: 0 });
   });
 
+  it("saves into a folder named for the Claude Code session, which the other tools find by filename", async () => {
+    const c = await connect({
+      DARKROOM_PROVIDER_ORDER: "mock",
+      CLAUDE_PROJECT_DIR: "/Users/someone/Workspace/Tee Shirts",
+      CLAUDE_CODE_SESSION_ID: "A1A9E5C8-798C-430A-9B0E-0A1CC365F6BA",
+    });
+    const generated = (await call(c, { prompt: "a mug" })).structuredContent as { path: string };
+    expect(dirname(generated.path)).toBe(join(await realpath(outputDir), basename(dirname(generated.path))));
+    expect(basename(dirname(generated.path))).toMatch(/^\d{4}-\d{2}-\d{2}_tee-shirts_a1a9e5c8$/);
+
+    const listed = (await c.callTool({ name: "list_images", arguments: {} })) as CallToolResult;
+    expect((listed.structuredContent as { images: { path: string }[] }).images.map((i) => i.path)).toEqual([generated.path]);
+    const alt = (await c.callTool({
+      name: "save_alt_text",
+      arguments: { image: basename(generated.path), alt_text: "A grey placeholder." },
+    })) as CallToolResult;
+    expect(alt.structuredContent).toMatchObject({ path: generated.path });
+  });
+
   it("save_alt_text writes alt text that list_images then returns, and says what it replaced", async () => {
     const c = await connect({ DARKROOM_PROVIDER_ORDER: "mock" });
     const generated = (await call(c, { prompt: "a mug" })).structuredContent as { path: string; sidecar_path: string };

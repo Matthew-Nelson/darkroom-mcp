@@ -23,6 +23,7 @@ describe("loadConfig", () => {
       comfyui: { url: "http://127.0.0.1:8188", workflow: "zimage", timeoutMs: 300_000 },
       openai: { apiKey: undefined, model: "gpt-image-2.5-flare", timeoutMs: 180_000 },
       gemini: { apiKey: undefined, model: "gemini-3.1-flash-image", timeoutMs: 180_000 },
+      session: undefined,
     });
   });
 
@@ -37,6 +38,27 @@ describe("loadConfig", () => {
     const config = loadConfig({ OPENAI_API_KEY: "sk-generic", GEMINI_API_KEY: "g-generic" });
     expect(config.openai.apiKey).toBeUndefined();
     expect(config.gemini.apiKey).toBeUndefined();
+  });
+
+  describe("the Claude Code session", () => {
+    const sessionId = "a1a9e5c8-798c-430a-9b0e-0a1cc365f6ba";
+
+    it("reads the project folder and session id Claude Code gives the server", () => {
+      expect(loadConfig({ CLAUDE_PROJECT_DIR: "/Users/m/proj", CLAUDE_CODE_SESSION_ID: sessionId }).session).toEqual({
+        projectDir: "/Users/m/proj",
+        sessionId,
+      });
+    });
+
+    // They're Claude Code's, not Darkroom's settings, so a bad value falls back to date folders instead of failing startup.
+    it.each([
+      ["only a project folder", { CLAUDE_PROJECT_DIR: "/Users/m/proj" }],
+      ["only a session id", { CLAUDE_CODE_SESSION_ID: sessionId }],
+      ["a session id that isn't a UUID", { CLAUDE_PROJECT_DIR: "/Users/m/proj", CLAUDE_CODE_SESSION_ID: "../../etc" }],
+      ["a relative project folder", { CLAUDE_PROJECT_DIR: "proj", CLAUDE_CODE_SESSION_ID: sessionId }],
+    ])("ignores %s", (_, env) => {
+      expect(loadConfig(env).session).toBeUndefined();
+    });
   });
 
   describe("DARKROOM_OUTPUT_DIR", () => {
