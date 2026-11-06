@@ -1,6 +1,6 @@
 # Progress
 
-## Current: session folders awaiting review (`feat/session-folders`) · M7 done (tagged `m7`) · Phase 2 roadmap complete
+## Current: M7 done (tagged `m7`) · Phase 2 roadmap complete
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -16,7 +16,7 @@
 | M6: Accessibility metadata | done | `m6` |
 | M7: Image-to-image and editing | done | `m7` |
 | Chore: FLUX.2 [klein] 4B benchmark (SPEC.md) | done | — |
-| Feature: session folders | awaiting review | — |
+| Feature: session folders | done | — |
 | Later: GitHub release | not scheduled | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
@@ -84,7 +84,7 @@ Asked for by Matt on Nov 6, 2026: images got lost in one flat folder. He chose a
 - [x] Done when: an image generated through the server, started the way Claude Code starts it, lands in that session's folder. Run against the built `dist/` over stdio with this session's `CLAUDE_PROJECT_DIR` and `CLAUDE_CODE_SESSION_ID` on real ComfyUI (draft): 5 images, 91–99 s each, all in `~/.darkroom/images/2026-11-06_darkroom-mcp_a1a9e5c8/`. `list_images` listed all 5 alongside the old flat images (53 in total); `save_alt_text` and `check_contrast` found a new image by filename alone, and `check_contrast` still found an image saved flat before the change.
 - [x] Adversarial review (one agent): 1 Medium, 1 Low, and 1 Nit fixed with failing tests first; one naming nit left to Matt (the branch prefix)
 - [ ] Not verified: whether `/clear` gives a new session id without restarting MCP servers. If it does, images after `/clear` keep going into the folder of the session the server started in.
-- [ ] Matt approved and merged the PR
+- [x] Matt approved and merged PR #27
 
 ## M7 gates
 
