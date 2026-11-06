@@ -1,6 +1,6 @@
 # Progress
 
-## Current: M7 done (reference images, tagged `m7`) · Phase 2 roadmap complete · next: only the unscheduled GitHub release, or new work Matt picks
+## Current: M7 done (tagged `m7`) · Phase 2 roadmap complete
 
 | Milestone | Status | Tag |
 | --- | --- | --- |
@@ -16,6 +16,7 @@
 | M6: Accessibility metadata | done | `m6` |
 | M7: Image-to-image and editing | done | `m7` |
 | Chore: FLUX.2 [klein] 4B benchmark (SPEC.md) | done | — |
+| Feature: session folders | done | — |
 | Later: GitHub release | not scheduled | — |
 
 Status values: `not started` → `in progress` → `awaiting review` → `done` (only once tagged).
@@ -75,6 +76,16 @@ Done when (agreed with Matt, Oct 3, 2026):
 - [x] Matt approved and merged PR #10 (after a multi-model review; all 5 findings fixed)
 - [x] Tagged `m5`
 
+## Session folders gates
+
+Asked for by Matt on Nov 6, 2026: images got lost in one flat folder. He chose a folder per session named by date, project, and session (option C of four).
+
+- [x] `npm run check` passes (539 tests, after the review fixes)
+- [x] Done when: an image generated through the server, started the way Claude Code starts it, lands in that session's folder. Run against the built `dist/` over stdio with this session's `CLAUDE_PROJECT_DIR` and `CLAUDE_CODE_SESSION_ID` on real ComfyUI (draft): 5 images, 91–99 s each, all in `~/.darkroom/images/2026-11-06_darkroom-mcp_a1a9e5c8/`. `list_images` listed all 5 alongside the old flat images (53 in total); `save_alt_text` and `check_contrast` found a new image by filename alone, and `check_contrast` still found an image saved flat before the change.
+- [x] Adversarial review (one agent): 1 Medium, 1 Low, and 1 Nit fixed with failing tests first; one naming nit left to Matt (the branch prefix)
+- [ ] Not verified: whether `/clear` gives a new session id without restarting MCP servers. If it does, images after `/clear` keep going into the folder of the session the server started in.
+- [x] Matt approved and merged PR #27
+
 ## M7 gates
 
 - [x] `npm run check` passes (516 tests, after the review fixes); real contract runs pass with a reference: ComfyUI (`DARKROOM_CONTRACT_COMFYUI=1`, 6 tests), OpenAI and Gemini (the reference case only, 2 tests)
@@ -104,6 +115,8 @@ The Phase 2 roadmap is done. What's left, none of it scheduled:
 2. **Proposed, not decided:** more aspect ratios (4:3, 3:4, maybe 4:5 and 5:4; Gemini supports them natively and OpenAI takes almost any size) and, locally, rendering at a reference's exact shape when no `aspect_ratio` is given, so the image-to-image template doesn't crop it. Raised by Matt on Oct 4, 2026, after seeing local results come back reframed. A spec change, so it needs Matt's go-ahead.
 
 ## Deviations from spec
+
+- **Images go into a folder per session** (Matt, Nov 6, 2026, after M7). SPEC had every image directly in `DARKROOM_OUTPUT_DIR`. Now a Claude Code session saves into `<local start date>_<project>_<first 8 of session id>`, read from `CLAUDE_PROJECT_DIR` and `CLAUDE_CODE_SESSION_ID`; without them, a folder per local date. Those variables were observed on the running server, not found documented, so a missing or odd value falls back to date folders instead of failing startup. Images saved flat before the change are still found and listed. The eval keeps the flat layout. SPEC.md and the README updated.
 
 - **`reference_strength` added to `generate_image`** (Matt, Oct 4, 2026, during M7). SPEC planned only `reference_image`. Local image-to-image needs a dial: at a fixed denoise of 0.5 a flat logo came back nearly unchanged (it needed about 0.7), while a photo already rearranges at 0.65. It's 0.1–1, default 0.5, mapped to ComfyUI's denoise through the template mapping; paid providers ignore it with a note in `ignored_params`.
 - **A reference's aspect ratio becomes the default** (Matt, Oct 4, 2026, M7). With a `reference_image` and no `aspect_ratio`, the output takes the reference's closest supported shape instead of 1:1. The sidecar's `request.aspect_ratio` records the ratio actually used.

@@ -134,7 +134,7 @@ All configuration comes from environment variables, validated with zod at startu
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `DARKROOM_OUTPUT_DIR` | No | `~/.darkroom/images` (resolved from the home directory) | Absolute path for images, sidecars, and the spend ledger. Relative paths are rejected, because the server's working directory depends on the client. |
+| `DARKROOM_OUTPUT_DIR` | No | `~/.darkroom/images` (resolved from the home directory) | Absolute path for images, sidecars, and the spend ledger. Relative paths are rejected, because the server's working directory depends on the client. Images go one level down: in a folder per Claude Code session, `<local start date>_<project>_<first 8 of session id>` (from `CLAUDE_PROJECT_DIR` and `CLAUDE_CODE_SESSION_ID`), or per local date (`YYYY-MM-DD`) without them. The ledger stays at the top. |
 | `DARKROOM_PROVIDER_ORDER` | No | `comfyui` | Comma-separated priority list. Paid providers must be listed here to be enabled. |
 | `DARKROOM_DAILY_CAP_USD` | No | `2.00` | Daily paid-spend ceiling |
 | `DARKROOM_ALLOW_PAID_FALLBACK` | No | `false` | Lets the router fall from free to paid providers already in the order |
@@ -150,7 +150,7 @@ All configuration comes from environment variables, validated with zod at startu
 Security requirements:
 
 - Never log or return API keys; redact them from error messages. Send keys in headers, never in URLs.
-- Sanitize `filename` to a safe slug, append a unique id, and resolve every write (via `realpath`) inside `DARKROOM_OUTPUT_DIR`; reject path traversal and symlink escapes.
+- Sanitize `filename` to a safe slug, append a unique id, and resolve every write (via `realpath`) inside `DARKROOM_OUTPUT_DIR` or one of its image subfolders; reject path traversal and symlink escapes, including a subfolder swapped for a symlink.
 - Cap prompt length (4,000 characters).
 - Log to stderr only, since stdout is the MCP stdio channel.
 - README documents keeping keys out of `~/.claude.json`, for example by launching Claude Code through a secret manager.

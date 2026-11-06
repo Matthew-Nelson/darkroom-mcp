@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize } from "node:path";
 import { z } from "zod";
+import type { ClaudeSession } from "./storage.js";
 
 // Every provider Darkroom knows about. A name can be valid in config before its
 // provider ships; the router reports it as unavailable instead of failing startup.
@@ -27,6 +28,8 @@ export interface Config {
   comfyui: { url: string; workflow: string; timeoutMs: number };
   openai: { apiKey: string | undefined; model: string; timeoutMs: number };
   gemini: { apiKey: string | undefined; model: string; timeoutMs: number };
+  // Names the folder images are saved in; undefined outside Claude Code.
+  session: ClaudeSession | undefined;
 }
 
 export class ConfigError extends Error {
@@ -98,6 +101,22 @@ const EnvSchema = z.object({
   DARKROOM_GEMINI_TIMEOUT_MS: optional(timeoutMs),
 });
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The session Claude Code starts the server in. These variables are Claude Code's, not
+ * documented settings of ours, so anything unexpected means "no session" rather than a
+ * startup error.
+ */
+function claudeSession(env: NodeJS.ProcessEnv): ClaudeSession | undefined {
+  const projectDir = env.CLAUDE_PROJECT_DIR;
+  const sessionId = env.CLAUDE_CODE_SESSION_ID;
+  if (projectDir === undefined || !isAbsolute(projectDir) || sessionId === undefined || !UUID.test(sessionId)) {
+    return undefined;
+  }
+  return { projectDir, sessionId };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = EnvSchema.safeParse(env);
   if (!parsed.success) {
@@ -126,5 +145,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       model: e.DARKROOM_GEMINI_MODEL ?? "gemini-3.1-flash-image",
       timeoutMs: e.DARKROOM_GEMINI_TIMEOUT_MS ?? 180_000,
     },
+    session: claudeSession(env),
   };
 }

@@ -249,7 +249,7 @@ No inputs; read-only, and never generates or spends anything. Returns the config
 | `limit` | `20` | 1 to 100 |
 | `provider` | all | Only images made by this provider |
 
-Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, cost, and alt text (`null` until saved with `save_alt_text`). Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be read or parsed, or their PNG is gone. Only files named the way Darkroom saves them (`<slug>-<8 hex digits>`) are listed, the same names `save_alt_text` and `check_contrast` accept. A broken sidecar or a missing PNG is skipped quietly; any other read error (permissions, for example) is also logged to stderr. The PNG path always comes from the sidecar's file name, never from its contents.
+Read-only. Lists images in `DARKROOM_OUTPUT_DIR` and its session and date folders, newest first, from their sidecars: PNG and sidecar paths, timestamp, prompt, provider, model, quality, aspect ratio, size, seed, cost, and alt text (`null` until saved with `save_alt_text`). Also returns how many images match before the limit, and how many sidecars were skipped because they couldn't be read or parsed, or their PNG is gone. Only files named the way Darkroom saves them (`<slug>-<8 hex digits>`) are listed, the same names `save_alt_text` and `check_contrast` accept. A broken sidecar or a missing PNG is skipped quietly; any other read error (permissions, for example) is also logged to stderr. The PNG path always comes from the sidecar's file name, never from its contents.
 
 ### `save_alt_text`
 
@@ -258,7 +258,7 @@ Read-only. Lists images in `DARKROOM_OUTPUT_DIR`, newest first, from their sidec
 | `image` | The PNG's absolute path, as `generate_image` or `list_images` returned it, or just its filename |
 | `alt_text` | Up to 1,000 characters; trimmed |
 
-Claude has already seen the image, so it writes the alt text, and this saves it into the image's sidecar (`alt_text`, plus `alt_text_updated_at`). Saving again replaces the text and returns the old one as `previous_alt_text`. The image must be one Darkroom saved: a `<slug>-<8 hex digits>.png` directly in `DARKROOM_OUTPUT_DIR` with its sidecar next to it. Other paths, symlinks, and relative paths are refused. The sidecar is rewritten atomically (a temp file renamed over it), one update at a time.
+Claude has already seen the image, so it writes the alt text, and this saves it into the image's sidecar (`alt_text`, plus `alt_text_updated_at`). Saving again replaces the text and returns the old one as `previous_alt_text`. The image must be one Darkroom saved: a `<slug>-<8 hex digits>.png` in one of its session or date folders (or, for images saved before those, directly in `DARKROOM_OUTPUT_DIR`), with its sidecar next to it. A bare filename is looked up in all of them; if it's in more than one, pass the full path. Other paths, symlinks, and relative paths are refused. The sidecar is rewritten atomically (a temp file renamed over it), one update at a time.
 
 ### `check_contrast`
 
@@ -305,7 +305,7 @@ All configuration comes from environment variables, validated at startup. The se
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DARKROOM_OUTPUT_DIR` | `~/.darkroom/images` | Absolute path for images, sidecars, and the spend ledger. Relative paths are rejected because the server's working directory depends on the client. A leading `~/` is expanded. |
+| `DARKROOM_OUTPUT_DIR` | `~/.darkroom/images` | Absolute path for images, sidecars, and the spend ledger. Relative paths are rejected because the server's working directory depends on the client. A leading `~/` is expanded. Each Claude Code session saves into its own folder, `<local start date>_<project>_<first 8 of session id>` (e.g. `2026-11-06_darkroom-mcp_a1a9e5c8`); other clients get a folder per local date. |
 | `DARKROOM_PROVIDER_ORDER` | `comfyui` | Comma-separated priority list: `mock`, `comfyui`, `openai`, `gemini` |
 | `DARKROOM_DAILY_CAP_USD` | `2.00` | Daily paid-spend ceiling, in USD, per UTC day |
 | `DARKROOM_ALLOW_PAID_FALLBACK` | `false` | Lets the router move from a skipped or failed free provider to a paid one already in the order |
