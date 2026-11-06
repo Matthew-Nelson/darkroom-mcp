@@ -164,7 +164,7 @@ describe("Storage.find", () => {
     ["a name save() never writes", "passwd", /isn't a Darkroom image name/],
     ["the sidecar's name", "a-mug-0123abcd.json", /isn't a Darkroom image name/],
     ["the spend ledger", "spend-ledger.json", /isn't a Darkroom image name/],
-    ["a missing image", "a-mug-0123abcd.png", /No image at/],
+    ["a missing image", "a-mug-0123abcd.png", /No image named a-mug-0123abcd\.png in/],
   ])("refuses %s", async (_, ref, message) => {
     await expect(storage.find(ref)).rejects.toThrow(message);
   });
@@ -225,7 +225,7 @@ describe("Storage.find", () => {
     await symlink(outside, join(dir, "evil-0123abcd.png"));
     await writeFile(join(dir, "evil-0123abcd.json"), "{}");
     try {
-      await expect(storage.find("evil-0123abcd.png")).rejects.toThrow(/No image at/);
+      await expect(storage.find("evil-0123abcd.png")).rejects.toThrow(/No image named evil-0123abcd\.png in/);
     } finally {
       await rm(dirname(outside), { recursive: true, force: true });
     }
@@ -234,7 +234,7 @@ describe("Storage.find", () => {
   it("refuses a folder named like an image", async () => {
     await mkdir(join(dir, "odd-0123abcd.png"));
     await writeFile(join(dir, "odd-0123abcd.json"), "{}");
-    await expect(storage.find("odd-0123abcd.png")).rejects.toThrow(/No image at/);
+    await expect(storage.find("odd-0123abcd.png")).rejects.toThrow(/No image named odd-0123abcd\.png in/);
   });
 });
 
@@ -337,6 +337,42 @@ describe("Storage subfolders", () => {
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
+  });
+
+  it("refuses to rewrite a sidecar once its subfolder is swapped for a symlink (review: session folders M1)", async () => {
+    const saved = await storage.save("a mug", png, {});
+    const sub = dirname(saved.sidecarPath);
+    const outside = await mkdtemp(join(tmpdir(), "darkroom-outside-"));
+    try {
+      await writeFile(join(outside, basename(saved.sidecarPath)), "{}");
+      await rename(sub, `${sub}-moved`);
+      await symlink(outside, sub);
+      await expect(storage.updateSidecar(saved.sidecarPath, (s) => ({ ...s, alt_text: "x" }))).rejects.toThrow(
+        StorageError,
+      );
+      expect(await readFile(join(outside, basename(saved.sidecarPath)), "utf8")).toBe("{}");
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.getuid?.() === 0)("still finds and lists images when one subfolder can't be read (review: session folders L2)", async () => {
+    const flat = await (await Storage.open(dir)).save("old", png, {});
+    const locked = join(storage.root, "2026-01-01");
+    await mkdir(locked);
+    await chmod(locked, 0o000);
+    try {
+      expect(await storage.find(basename(flat.pngPath))).toEqual(flat);
+      await expect(storage.find("gone-0123abcd.png")).rejects.toThrow(StorageError);
+    } finally {
+      await chmod(locked, 0o755);
+    }
+  });
+
+  it("says every folder was searched when a filename isn't found", async () => {
+    await expect(storage.find("gone-0123abcd.png")).rejects.toThrow(
+      `No image named gone-0123abcd.png in ${storage.root} or its session and date folders.`,
+    );
   });
 
   it("rewrites a subfolder image's sidecar", async () => {

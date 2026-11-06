@@ -61,7 +61,19 @@ export async function listImages(root: string, opts: { limit: number; provider?:
   // Only names save() writes: skips the spend ledger, temp files, and anything save_alt_text or check_contrast would refuse.
   const sidecars = [];
   for (const dir of await imageDirs(root)) {
-    for (const name of await readdir(dir)) if (SIDECAR_NAME.test(name)) sidecars.push(join(dir, name));
+    let names: string[];
+    try {
+      names = await readdir(dir);
+    } catch (err) {
+      // One unreadable subfolder mustn't hide every other image; a missing top-level folder is a real error.
+      if (dir === root) throw err;
+      // Deleted since imageDirs read the top level: nothing to list.
+      if (!isErrno(err, "ENOENT")) {
+        log("warn", "couldn't read image folder", { path: dir, error: err instanceof Error ? err.message : String(err) });
+      }
+      continue;
+    }
+    for (const name of names) if (SIDECAR_NAME.test(name)) sidecars.push(join(dir, name));
   }
   const read = await inBatches(sidecars, readImage);
   const images = read.filter((i): i is Image => i !== undefined);

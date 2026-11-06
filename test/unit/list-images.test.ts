@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -125,6 +125,21 @@ describe("listImages", () => {
       expect(await listImages(dir, { limit: 10 })).toEqual({ images: [], total: 0, unreadable: 0 });
     } finally {
       await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.getuid?.() === 0)("lists the rest and logs when a subfolder can't be read (review: session folders L2)", async () => {
+    await saved({ at: "2026-10-02T10:00:00.000Z", prompt: "flat" });
+    await mkdir(join(dir, "2026-10-03"));
+    await chmod(join(dir, "2026-10-03"), 0o000);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const out = await listImages(dir, { limit: 10 });
+      expect(out.images.map((i) => i.prompt)).toEqual(["flat"]);
+      expect(String(stderr.mock.calls[0]?.[0])).toMatch(/couldn't read image folder .*2026-10-03.*EACCES/);
+    } finally {
+      stderr.mockRestore();
+      await chmod(join(dir, "2026-10-03"), 0o755);
     }
   });
 

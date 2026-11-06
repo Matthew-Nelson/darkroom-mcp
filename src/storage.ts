@@ -3,6 +3,7 @@ import { lstat, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } 
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import sharp from "sharp";
+import { log } from "./log.js";
 
 const MAX_SLUG_LENGTH = 60;
 
@@ -158,11 +159,22 @@ export class Storage {
     }
     if (dir === undefined) {
       const dirs = [];
-      for (const d of await imageDirs(this.root)) if (await isFile(join(d, name))) dirs.push(d);
+      for (const d of await imageDirs(this.root)) {
+        // One unreadable subfolder mustn't hide images everywhere else.
+        const found = await isFile(join(d, name)).catch((err: unknown) => {
+          if (d === this.root) throw err;
+          log("warn", "couldn't read image folder", { path: d, error: err instanceof Error ? err.message : String(err) });
+          return false;
+        });
+        if (found) dirs.push(d);
+      }
       if (dirs.length > 1) {
         throw new StorageError(`${name} is in more than one folder (${dirs.join(", ")}); pass its full path instead.`);
       }
-      dir = dirs[0] ?? this.root;
+      dir = dirs[0];
+      if (dir === undefined) {
+        throw new StorageError(`No image named ${name} in ${this.root} or its session and date folders.`);
+      }
     }
     const pngPath = join(dir, name);
     const sidecarPath = pngPath.replace(/\.png$/, ".json");
@@ -212,7 +224,12 @@ export class Storage {
     update: (sidecar: Record<string, unknown>) => Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     await this.checkRoot({ create: true });
-    assertInside(this.root, sidecarPath);
+    // The folder is checked now, not just when the image was found: a subfolder swapped for a
+    // symlink in between would otherwise redirect the write outside the output folder.
+    const dir = await realpath(dirname(sidecarPath)).catch(() => undefined);
+    if (dir === undefined || !this.isImageDir(dir)) {
+      throw new StorageError(`${sidecarPath} isn't in Darkroom's output folder (${this.root}).`);
+    }
     if (!(await lstat(sidecarPath)).isFile()) throw new StorageError(`${sidecarPath} isn't a regular file.`);
     let before: unknown;
     try {
@@ -226,7 +243,7 @@ export class Storage {
     }
     const sidecar = before as Record<string, unknown>;
     // Dot-prefixed with a .tmp suffix, so list_images never mistakes it for a sidecar.
-    const tmpPath = join(this.root, `.${basename(sidecarPath)}.${randomBytes(4).toString("hex")}.tmp`);
+    const tmpPath = join(dir, `.${basename(sidecarPath)}.${randomBytes(4).toString("hex")}.tmp`);
     const json = `${JSON.stringify(update({ ...sidecar }), null, 2)}\n`;
     try {
       // Inside the try: a write that fails partway (a full disk) has already created the temp file.
