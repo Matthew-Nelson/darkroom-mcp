@@ -2,8 +2,16 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, writeFil
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import sharp from "sharp";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { assertInside, makePreview, slugify, Storage, StorageError } from "../../src/storage.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  assertInside,
+  makePreview,
+  slugify,
+  Storage,
+  StorageError,
+  SUBFOLDER_NAME,
+  subfolderNamer,
+} from "../../src/storage.js";
 
 describe("slugify", () => {
   it.each([
@@ -227,6 +235,114 @@ describe("Storage.find", () => {
     await mkdir(join(dir, "odd-0123abcd.png"));
     await writeFile(join(dir, "odd-0123abcd.json"), "{}");
     await expect(storage.find("odd-0123abcd.png")).rejects.toThrow(/No image at/);
+  });
+});
+
+describe("subfolderNamer", () => {
+  const session = { projectDir: "/Users/m/Workspace/My Project!", sessionId: "A1A9E5C8-798C-430A-9B0E-0A1CC365F6BA" };
+
+  it("names a Claude Code session's folder by its local start date, project, and session id", () => {
+    const now = vi.fn(() => new Date(2026, 10, 6, 23, 30));
+    const name = subfolderNamer(session, now);
+    now.mockReturnValue(new Date(2026, 10, 7, 0, 30));
+    // Past midnight the session keeps its folder.
+    expect(name()).toBe("2026-11-06_my-project_a1a9e5c8");
+    expect(name()).toMatch(SUBFOLDER_NAME);
+  });
+
+  it("falls back to the local date of each save without a session", () => {
+    const now = vi.fn(() => new Date(2026, 0, 5, 23, 59));
+    const name = subfolderNamer(undefined, now);
+    expect(name()).toBe("2026-01-05");
+    now.mockReturnValue(new Date(2026, 0, 6, 0, 1));
+    expect(name()).toBe("2026-01-06");
+    expect(name()).toMatch(SUBFOLDER_NAME);
+  });
+});
+
+describe("Storage subfolders", () => {
+  let dir: string;
+  let storage: Storage;
+  const png = Buffer.from("png");
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "darkroom-subfolders-"));
+    storage = await Storage.open(dir, { subfolder: () => "2026-11-06_proj_a1a9e5c8" });
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("saves into the subfolder, creating it", async () => {
+    const saved = await storage.save("a mug", png, {});
+    expect(dirname(saved.pngPath)).toBe(join(storage.root, "2026-11-06_proj_a1a9e5c8"));
+    expect(dirname(saved.sidecarPath)).toBe(dirname(saved.pngPath));
+    const again = await storage.save("a mug", png, {});
+    expect(dirname(again.pngPath)).toBe(dirname(saved.pngPath));
+  });
+
+  it("finds a subfolder image by its absolute path or its filename", async () => {
+    const saved = await storage.save("a mug", png, {});
+    expect(await storage.find(saved.pngPath)).toEqual(saved);
+    expect(await storage.find(basename(saved.pngPath))).toEqual(saved);
+  });
+
+  it("still finds images saved before subfolders, at the top of the output folder", async () => {
+    const flat = await (await Storage.open(dir)).save("old", png, {});
+    expect(await storage.find(flat.pngPath)).toEqual(flat);
+    expect(await storage.find(basename(flat.pngPath))).toEqual(flat);
+  });
+
+  it("asks for the full path when a filename is in more than one folder", async () => {
+    const saved = await storage.save("a mug", png, {});
+    await mkdir(join(storage.root, "2026-11-05"));
+    for (const p of [saved.pngPath, saved.sidecarPath]) {
+      await writeFile(join(storage.root, "2026-11-05", basename(p)), "copy");
+    }
+    await expect(storage.find(basename(saved.pngPath))).rejects.toThrow(/more than one folder.*full path/);
+    expect(await storage.find(saved.pngPath)).toEqual(saved);
+  });
+
+  it.each([
+    ["a folder Darkroom doesn't name", "other"],
+    ["a folder two levels down", join("2026-11-06", "2026-11-06")],
+  ])("refuses an image in %s", async (_, sub) => {
+    await mkdir(join(storage.root, sub), { recursive: true });
+    const ref = join(storage.root, sub, "a-mug-0123abcd.png");
+    await writeFile(ref, "png");
+    await writeFile(ref.replace(/\.png$/, ".json"), "{}");
+    await expect(storage.find(ref)).rejects.toThrow(/isn't in Darkroom's output folder/);
+  });
+
+  it("refuses to save through a subfolder that's a planted symlink", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "darkroom-outside-"));
+    try {
+      await symlink(outside, join(storage.root, "2026-11-06_proj_a1a9e5c8"));
+      await expect(storage.save("a mug", png, {})).rejects.toThrow(StorageError);
+      expect(await readdir(outside)).toEqual([]);
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("doesn't look up a filename through a symlinked subfolder", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "darkroom-outside-"));
+    try {
+      await writeFile(join(outside, "evil-0123abcd.png"), "secret");
+      await writeFile(join(outside, "evil-0123abcd.json"), "{}");
+      await symlink(outside, join(storage.root, "2026-11-05"));
+      await expect(storage.find("evil-0123abcd.png")).rejects.toThrow(/No image/);
+      await expect(storage.find(join(storage.root, "2026-11-05", "evil-0123abcd.png"))).rejects.toThrow(
+        /isn't in Darkroom's output folder/,
+      );
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("rewrites a subfolder image's sidecar", async () => {
+    const saved = await storage.save("a mug", png, {});
+    await storage.updateSidecar(saved.sidecarPath, (s) => ({ ...s, alt_text: "A mug." }));
+    expect(JSON.parse(await readFile(saved.sidecarPath, "utf8"))).toMatchObject({ alt_text: "A mug." });
   });
 });
 
