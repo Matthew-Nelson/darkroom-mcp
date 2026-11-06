@@ -6,7 +6,7 @@ import { z } from "zod";
 import { PROVIDER_NAMES, type ProviderName } from "../config.js";
 import { formatUsd } from "../ledger.js";
 import { log } from "../log.js";
-import { isErrno, SIDECAR_NAME, type Storage } from "../storage.js";
+import { imageDirs, isErrno, SIDECAR_NAME, type Storage } from "../storage.js";
 
 const DESCRIPTION = `List recently generated images, newest first, from the metadata saved next to each one: file path, prompt, provider, model, size, seed, cost, and alt text (if saved with save_alt_text).
 
@@ -59,8 +59,11 @@ type Image = z.infer<typeof imageSchema>;
 
 export async function listImages(root: string, opts: { limit: number; provider?: ProviderName | undefined }): Promise<Output> {
   // Only names save() writes: skips the spend ledger, temp files, and anything save_alt_text or check_contrast would refuse.
-  const names = (await readdir(root)).filter((name) => SIDECAR_NAME.test(name));
-  const read = await inBatches(names, (name) => readImage(root, name));
+  const sidecars = [];
+  for (const dir of await imageDirs(root)) {
+    for (const name of await readdir(dir)) if (SIDECAR_NAME.test(name)) sidecars.push(join(dir, name));
+  }
+  const read = await inBatches(sidecars, readImage);
   const images = read.filter((i): i is Image => i !== undefined);
   const matching = images
     .filter((i) => opts.provider === undefined || i.provider === opts.provider)
@@ -68,8 +71,7 @@ export async function listImages(root: string, opts: { limit: number; provider?:
   return { images: matching.slice(0, opts.limit), total: matching.length, unreadable: read.length - images.length };
 }
 
-async function readImage(root: string, sidecarName: string): Promise<Image | undefined> {
-  const sidecarPath = join(root, sidecarName);
+async function readImage(sidecarPath: string): Promise<Image | undefined> {
   // The PNG path comes from the sidecar's own name, never its contents, so an edited
   // sidecar can't point outside the output folder.
   const path = sidecarPath.replace(/\.json$/, ".png");

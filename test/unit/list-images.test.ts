@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +18,16 @@ afterEach(async () => {
 let n = 0;
 
 /** Writes a PNG (unless `png: false`) and its sidecar the way Storage does, and returns the stem. */
-async function saved(o: { at: string; provider?: string; prompt?: string; png?: boolean; sidecar?: unknown }) {
+async function saved(o: {
+  at: string;
+  provider?: string;
+  prompt?: string;
+  png?: boolean;
+  sidecar?: unknown;
+  folder?: string;
+}) {
+  const at = o.folder === undefined ? dir : join(dir, o.folder);
+  await mkdir(at, { recursive: true });
   const stem = `image-${(n++).toString(16).padStart(8, "0")}`;
   const sidecar = o.sidecar ?? {
     image: `${stem}.png`,
@@ -36,8 +45,8 @@ async function saved(o: { at: string; provider?: string; prompt?: string; png?: 
     ignored_params: [],
     skipped_providers: [],
   };
-  await writeFile(join(dir, `${stem}.json`), typeof sidecar === "string" ? sidecar : JSON.stringify(sidecar));
-  if (o.png !== false) await writeFile(join(dir, `${stem}.png`), "png");
+  await writeFile(join(at, `${stem}.json`), typeof sidecar === "string" ? sidecar : JSON.stringify(sidecar));
+  if (o.png !== false) await writeFile(join(at, `${stem}.png`), "png");
   return stem;
 }
 
@@ -94,6 +103,29 @@ describe("listImages", () => {
     const out = await listImages(dir, { limit: 20, provider: "openai" });
     expect(out.images.map((i) => i.provider)).toEqual(["openai"]);
     expect(out.total).toBe(1);
+  });
+
+  it("lists images from the top level and from session and date subfolders together", async () => {
+    await saved({ at: "2026-10-02T10:00:00.000Z", prompt: "flat" });
+    const session = await saved({ at: "2026-10-03T10:00:00.000Z", prompt: "session", folder: "2026-10-03_proj_a1a9e5c8" });
+    await saved({ at: "2026-10-04T10:00:00.000Z", prompt: "dated", folder: "2026-10-04" });
+
+    const out = await listImages(dir, { limit: 10 });
+    expect(out.images.map((i) => i.prompt)).toEqual(["dated", "session", "flat"]);
+    expect(out.images[1]?.path).toBe(join(dir, "2026-10-03_proj_a1a9e5c8", `${session}.png`));
+  });
+
+  it("skips folders save() doesn't name, deeper folders, and symlinked folders", async () => {
+    await saved({ at: "2026-10-02T10:00:00.000Z", prompt: "other", folder: "thumbs" });
+    await saved({ at: "2026-10-02T10:00:00.000Z", prompt: "deep", folder: join("2026-10-02", "2026-10-02") });
+    const outside = await mkdtemp(join(tmpdir(), "darkroom-outside-"));
+    try {
+      await writeFile(join(outside, "evil-0123abcd.json"), "{}");
+      await symlink(outside, join(dir, "2026-10-05"));
+      expect(await listImages(dir, { limit: 10 })).toEqual({ images: [], total: 0, unreadable: 0 });
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   it("is empty for an empty folder", async () => {
